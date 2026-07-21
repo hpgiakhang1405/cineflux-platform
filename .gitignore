@@ -16,6 +16,9 @@ build/
 dist/
 *.egg-info/
 
+# Generated proof artifacts
+docs/assets/docker/*.tmp
+
 # Local environment and secrets
 .env
 .env.*
