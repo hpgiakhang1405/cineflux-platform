@@ -1,4 +1,7 @@
-ARG SUPERSET_IMAGE=apache/superset:4.1.4
+# syntax=docker/dockerfile:1.8
+# check=skip=InvalidDefaultArgInFrom
+
+ARG SUPERSET_IMAGE
 
 FROM ${SUPERSET_IMAGE}
 

@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PYTHON_BASELINE_IMAGE
+ARG UV_IMAGE
+
+FROM ${UV_IMAGE} AS uv
+
+FROM ${PYTHON_BASELINE_IMAGE}
+COPY --from=uv /uv /uvx /bin/
+WORKDIR /app
+COPY data_platform/generator/pyproject.toml data_platform/generator/uv.lock data_platform/generator/README.md ./
+COPY data_platform/generator/src ./src
+COPY data_platform/generator/config ./config
+COPY schemas/avro/playback_events_v1.avsc ./schemas/playback_events_v1.avsc
+RUN uv sync --frozen
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1
+ENTRYPOINT ["cineflux-data-generator"]

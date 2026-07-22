@@ -1,6 +1,10 @@
-ARG HIVE_IMAGE=apache/hive:4.1.0
+# syntax=docker/dockerfile:1.8
+# check=skip=InvalidDefaultArgInFrom
 
-FROM alpine:3.21.3 AS jdbc-driver
+ARG HIVE_IMAGE
+ARG ALPINE_IMAGE
+
+FROM ${ALPINE_IMAGE} AS jdbc-driver
 
 ARG POSTGRES_JDBC_VERSION=42.7.7
 ARG POSTGRES_JDBC_SHA256=157963d60ae66d607e09466e8c0cdf8087e9cb20d0159899ffca96bca2528460

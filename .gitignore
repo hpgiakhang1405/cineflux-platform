@@ -4,20 +4,14 @@ venv/
 __pycache__/
 *.py[cod]
 
-# Test, type-check, and lint caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
 # Build artifacts
 build/
 dist/
 *.egg-info/
 
-# Generated proof artifacts
+# Generated local artifacts
 docs/assets/docker/*.tmp
+artifacts/
 
 # Local environment and secrets
 .env

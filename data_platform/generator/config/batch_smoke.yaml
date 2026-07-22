@@ -1,0 +1,37 @@
+scenario_name: smoke
+shared_config: shared_smoke.yaml
+history_days: 7
+base_playback_event_count: 20000
+rows_per_file: 5000
+compression: snappy
+bootstrap_prefix: bootstrap/initial_historical_playback_events
+recurring_prefix: recurring
+duplicate_rate: 0.02
+entity_change_rate: 0.10
+city_distribution:
+  Ho Chi Minh City: 0.45
+  Hanoi: 0.20
+  Da Nang: 0.08
+  Can Tho: 0.06
+  Hai Phong: 0.05
+  Other: 0.16
+genre_distribution:
+  Drama: 0.30
+  Action: 0.25
+  Comedy: 0.20
+  Documentary: 0.08
+  Thriller: 0.07
+  Animation: 0.05
+  Romance: 0.05
+schema_evolution:
+  dataset: content
+  field_name: critic_score
+  introduced_schema_version: 2
+  non_null_rate: 0.90
+deliveries:
+  - delivery_id: delivery_001
+    delivery_timestamp: "2026-01-01T00:00:00Z"
+    schema_version: 1
+  - delivery_id: delivery_002
+    delivery_timestamp: "2026-01-02T00:00:00Z"
+    schema_version: 2

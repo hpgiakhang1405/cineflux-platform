@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name": "PlaybackEvent",
+  "namespace": "com.cineflux.events",
+  "doc": "Playback event emitted at or after the platform cutover timestamp.",
+  "fields": [
+    {"name": "event_id", "type": "string"},
+    {"name": "user_id", "type": "string"},
+    {"name": "content_id", "type": "string"},
+    {"name": "session_id", "type": "string"},
+    {"name": "event_type", "type": "string"},
+    {"name": "position_seconds", "type": "int"},
+    {"name": "watch_seconds", "type": "int"},
+    {
+      "name": "event_timestamp",
+      "type": {"type": "long", "logicalType": "timestamp-millis"}
+    },
+    {
+      "name": "produced_timestamp",
+      "type": {"type": "long", "logicalType": "timestamp-millis"}
+    },
+    {"name": "payload_schema_version", "type": "int", "default": 1}
+  ]
+}

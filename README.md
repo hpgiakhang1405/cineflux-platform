@@ -9,6 +9,7 @@ This repository currently delivers **Phase 1 — Scalable Data Platform**. Later
 - [Business Domain](#business-domain)
 - [Current Delivery Scope](#current-delivery-scope)
 - [Deployment Architecture](#deployment-architecture)
+- [Components](#components)
 - [Documentation](#documentation)
 
 ## Business Domain
@@ -36,9 +37,14 @@ Phase 1 focuses on the data-platform foundation:
 
 > **Deployment diagram placeholder.**
 
+## Components
+
+- [Data Generator](data_platform/generator/README.md) produces deterministic batch files in
+  MinIO and playback event streams in Kafka.
+
 ## Documentation
 
-Detailed implementation evidence is organized by rubric area:
+Detailed implementation evidence is organized by platform area:
 
 - [Docker](docs/Docker.md)
 - [Data Generator](docs/DataGenerator.md)

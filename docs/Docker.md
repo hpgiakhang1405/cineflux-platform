@@ -29,6 +29,9 @@ make env
 
 The command copies `.env.example` to `.env`, generates local-only credentials, and sets the
 file mode to `0600`. It fails without modifying the existing file when `.env` already exists.
+Both files must keep the same keys. Local secret values are expected to differ from the
+public placeholders; non-secret values should remain aligned unless a developer intentionally
+overrides the local deployment.
 
 Validate a profile before starting it:
 
@@ -49,6 +52,8 @@ secrets.
 | `orchestration` | PostgreSQL, Airflow init, webserver, scheduler | Workflow orchestration runtime |
 | `analytics` | Storage dependencies, Superset init, Superset | SQL analytics and visualization runtime |
 | `governance` | PostgreSQL, Kafka, Schema Registry, Elasticsearch, DataHub | Metadata storage, search, events, and governance UI |
+| `generator-batch` | MinIO, batch Data Generator | Synthetic Parquet source generation |
+| `generator-stream` | Kafka, Schema Registry, stream Data Generator | Synthetic event-stream generation |
 
 Start, inspect, read logs, and stop a profile with:
 
@@ -177,9 +182,10 @@ for later pipeline, data-quality, or performance tests.
 Every first-party deployable component must follow these rules:
 
 1. Pin base-image and dependency versions; never use `latest`.
-2. Keep a `.dockerignore` beside every `Dockerfile`.
+2. Keep one `.dockerignore` at the Docker build-context root so every component build uses
+   the same exclusions.
 3. Prefer multistage builds for first-party Python components.
-4. Install production dependencies separately from development dependencies.
+4. Install only declared runtime dependencies in production images.
 5. Build Python environments inside the image; never copy a local `.venv`.
 6. Keep credentials and environment-specific configuration outside the image.
 7. Use a non-root runtime user when the upstream image supports it.
@@ -197,16 +203,45 @@ images:
 Both custom images use `pull_policy: build`. They are built locally and are not pulled from
 a public `cineflux/*` registry namespace.
 
-## Image Optimization Evidence
+## Data Generator Image Optimization
 
-The infrastructure stack primarily uses pinned third-party images. Repackaging vendor
-images solely to report a smaller number would not represent a first-party optimization and
-would produce misleading evidence. Therefore, no before/after benchmark is claimed for the
-upstream infrastructure images.
+The Data Generator is the first first-party image with a baseline and optimized build:
 
-When first-party component images are introduced, record the baseline image size, optimized
-image size, percentage reduction, and the exact optimization method in this section. Use a
-reproducible command such as:
+| Image | Dockerfile | Dependency set | Runtime base | Measured size |
+|---|---|---|---|---|
+| `cineflux/data-generator:baseline` | `data_platform/generator/Dockerfile.baseline` | Runtime dependencies in a single build stage | `python:3.14.5-bookworm` | 1.97 GB |
+| `cineflux/data-generator:0.1.0` | `data_platform/generator/Dockerfile` | Runtime dependencies only | `python:3.14.5-slim-bookworm` | 633 MB |
+
+The optimized image uses a multistage build, a slim runtime base, a non-editable wheel, and a
+non-root `cineflux` user. Only the locked virtual environment, runtime configuration, and
+Avro contract are copied into the final stage.
+
+The two Compose services use `pull_policy: never` because this first-party image is built
+locally with `make generator-build` and is not published to a registry.
+
+Reproduce the comparison:
+
+```bash
+make generator-build-baseline
+make generator-build
+docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}" \
+  | grep 'cineflux/data-generator'
+```
+
+```console
+cineflux/data-generator:baseline    1.97GB
+cineflux/data-generator:0.1.0       633MB
+```
+
+The optimized image saves approximately `1.337 GB`, a `67.9%` reduction:
+
+```text
+(1.97 GB - 0.633 GB) / 1.97 GB * 100 = 67.9%
+```
+
+## Image Listing
+
+Use this command to inspect all local CineFlux images without exposing environment values:
 
 ```bash
 docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}" | grep cineflux
@@ -243,6 +278,8 @@ make config PROFILE=processing
 make config PROFILE=orchestration
 make config PROFILE=analytics
 make config PROFILE=governance
+make config PROFILE=generator-batch
+make config PROFILE=generator-stream
 ```
 
 Representative runtime checks are:
