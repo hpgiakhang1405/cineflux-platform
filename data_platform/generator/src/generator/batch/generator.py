@@ -15,17 +15,17 @@ from typing import Any, Literal, cast
 import numpy as np
 from faker import Faker
 
-from cineflux_data_generator.batch.models import (
+from generator.batch.models import (
     ContentRecordV1,
     ContentRecordV2,
     PlaybackEventRecord,
     SubscriptionRecord,
     UserRecord,
 )
-from cineflux_data_generator.batch.problems import DuplicateInjector, WeightedCategorySampler
-from cineflux_data_generator.config import BatchConfig, DeliveryConfig, SharedConfig
-from cineflux_data_generator.ids import content_id, event_id, session_id, user_id
-from cineflux_data_generator.playback import session_entities, stable_int
+from generator.batch.problems import DuplicateInjector, WeightedCategorySampler
+from generator.config import BatchConfig, DeliveryConfig, SharedConfig
+from generator.ids import content_id, event_id, session_id, user_id
+from generator.playback import session_entities, stable_int
 
 
 @dataclass(frozen=True)

@@ -10,15 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from cineflux_data_generator.batch.generator import BatchDataGenerator
-from cineflux_data_generator.batch.runner import BatchRunner
-from cineflux_data_generator.config import load_batch_config, load_stream_config
-from cineflux_data_generator.io.kafka_publisher import KafkaEventPublisher
-from cineflux_data_generator.io.minio_writer import MinioObjectWriter
-from cineflux_data_generator.settings import BatchRuntimeSettings, StreamRuntimeSettings
-from cineflux_data_generator.stream.generator import StreamDataGenerator
-from cineflux_data_generator.stream.runner import StreamRunner
-from cineflux_data_generator.stream.summary import build_stream_summary
+from generator.batch.generator import BatchDataGenerator
+from generator.batch.runner import BatchRunner
+from generator.config import load_batch_config, load_stream_config
+from generator.io.kafka_publisher import KafkaEventPublisher
+from generator.io.minio_writer import MinioObjectWriter
+from generator.settings import BatchRuntimeSettings, StreamRuntimeSettings
+from generator.stream.generator import StreamDataGenerator
+from generator.stream.runner import StreamRunner
+from generator.stream.summary import build_stream_summary
 
 
 class GeneratorMode(Protocol):

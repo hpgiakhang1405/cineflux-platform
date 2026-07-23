@@ -12,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 
-from cineflux_data_generator.modes import GeneratorModeFactory
+from generator.modes import GeneratorModeFactory
 
 
 def main() -> None:

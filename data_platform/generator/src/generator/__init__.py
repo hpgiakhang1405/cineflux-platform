@@ -5,6 +5,6 @@ Writes: Parquet source deliveries to MinIO or Avro playback events to Kafka.
 Runs: the ``cineflux-data-generator`` console entrypoint.
 """
 
-from cineflux_data_generator.cli import main
+from generator.cli import main
 
 __all__ = ["main"]

@@ -17,8 +17,8 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import MessageField, SerializationContext
 
-from cineflux_data_generator.io.protocols import DeliveryResult
-from cineflux_data_generator.stream.models import StreamEnvelope, StreamEvent
+from generator.io.protocols import DeliveryResult
+from generator.stream.models import StreamEnvelope, StreamEvent
 
 
 class KafkaEventPublisher:

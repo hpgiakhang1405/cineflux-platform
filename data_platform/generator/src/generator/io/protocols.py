@@ -8,7 +8,7 @@ Runs: dependency composition in generator runners.
 from dataclasses import dataclass
 from typing import Protocol
 
-from cineflux_data_generator.stream.models import StreamEnvelope, StreamEvent
+from generator.stream.models import StreamEnvelope, StreamEvent
 
 
 @dataclass(frozen=True)

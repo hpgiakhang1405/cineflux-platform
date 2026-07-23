@@ -12,8 +12,8 @@ import math
 from collections import Counter
 from dataclasses import dataclass
 
-from cineflux_data_generator.batch.generator import GeneratedObject
-from cineflux_data_generator.config import BatchConfig, DeliveryConfig, SharedConfig
+from generator.batch.generator import GeneratedObject
+from generator.config import BatchConfig, DeliveryConfig, SharedConfig
 
 DATASET_KEYS = {
     "initial_historical_playback_events": "event_id",

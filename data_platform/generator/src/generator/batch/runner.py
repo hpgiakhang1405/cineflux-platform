@@ -10,11 +10,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 
-from cineflux_data_generator.batch.generator import BatchDataGenerator, GeneratedObject
-from cineflux_data_generator.batch.summary import BatchSummaryCollector
-from cineflux_data_generator.config import BatchConfig, DeliveryConfig, SharedConfig
-from cineflux_data_generator.io.parquet import serialize_parquet
-from cineflux_data_generator.io.protocols import ObjectWriter
+from generator.batch.generator import BatchDataGenerator, GeneratedObject
+from generator.batch.summary import BatchSummaryCollector
+from generator.config import BatchConfig, DeliveryConfig, SharedConfig
+from generator.io.parquet import serialize_parquet
+from generator.io.protocols import ObjectWriter
 
 LOGGER = logging.getLogger(__name__)
 

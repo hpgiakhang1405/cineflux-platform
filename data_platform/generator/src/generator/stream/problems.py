@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from cineflux_data_generator.config import BurstConfig
+from generator.config import BurstConfig
 
 
 @dataclass(frozen=True)

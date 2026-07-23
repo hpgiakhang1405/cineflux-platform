@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import chain
 
-from cineflux_data_generator.io.protocols import EventPublisher
-from cineflux_data_generator.stream.generator import StreamDataGenerator
+from generator.io.protocols import EventPublisher
+from generator.stream.generator import StreamDataGenerator
 
 LOGGER = logging.getLogger(__name__)
 

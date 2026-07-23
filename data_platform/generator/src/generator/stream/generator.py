@@ -13,11 +13,11 @@ from typing import Literal
 
 import numpy as np
 
-from cineflux_data_generator.config import SharedConfig, StreamConfig
-from cineflux_data_generator.ids import content_id, event_id, session_id, user_id
-from cineflux_data_generator.playback import session_entities, stable_int
-from cineflux_data_generator.stream.models import StreamEnvelope, StreamEvent
-from cineflux_data_generator.stream.problems import (
+from generator.config import SharedConfig, StreamConfig
+from generator.ids import content_id, event_id, session_id, user_id
+from generator.playback import session_entities, stable_int
+from generator.stream.models import StreamEnvelope, StreamEvent
+from generator.stream.problems import (
     BurstSchedule,
     DuplicateIndexSelector,
     OutOfOrderIndexSelector,

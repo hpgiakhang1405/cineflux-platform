@@ -7,8 +7,8 @@ Runs: automatically after the ``stream`` command publishes all messages.
 
 from __future__ import annotations
 
-from cineflux_data_generator.config import SharedConfig, StreamConfig
-from cineflux_data_generator.stream.runner import StreamRunResult
+from generator.config import SharedConfig, StreamConfig
+from generator.stream.runner import StreamRunResult
 
 
 def build_stream_summary(
