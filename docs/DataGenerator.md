@@ -51,6 +51,13 @@ The committed YAML files are the complete configuration source:
 |---|---|---|---|
 | Smoke | [`shared_smoke.yaml`](../data_platform/generator/config/shared_smoke.yaml) | [`batch_smoke.yaml`](../data_platform/generator/config/batch_smoke.yaml) | [`stream_smoke.yaml`](../data_platform/generator/config/stream_smoke.yaml) |
 | Demo | [`shared_demo.yaml`](../data_platform/generator/config/shared_demo.yaml) | [`batch_demo.yaml`](../data_platform/generator/config/batch_demo.yaml) | [`stream_demo.yaml`](../data_platform/generator/config/stream_demo.yaml) |
+| Flink benchmark | [`shared_demo.yaml`](../data_platform/generator/config/shared_demo.yaml) | N/A | [`stream_flink_demo.yaml`](../data_platform/generator/config/stream_flink_demo.yaml) |
+
+`event_time_acceleration` advances simulated production time faster than wall-clock time
+without changing message counts or problem rates. The smoke stream uses `60.0` for quick
+window checks, the paced Flink benchmark uses `5.0`, and the general demo remains at `1.0`.
+The Flink benchmark reuses the demo entity ranges and generates 500,000 base events at a
+configured base rate of 4,000 events per second.
 
 ### Scenario Size
 
@@ -100,7 +107,8 @@ recurring/<dataset>/
 
 Stream records use the six-partition `playback_events` topic and the versioned contract at
 [`schemas/avro/playback_events_v1.avsc`](../schemas/avro/playback_events_v1.avsc). Schema
-Registry compatibility is `BACKWARD`.
+Registry compatibility is `BACKWARD`. Each Kafka record timestamp equals the event's
+`produced_timestamp`, providing a deterministic production-time watermark source.
 
 ## Run
 

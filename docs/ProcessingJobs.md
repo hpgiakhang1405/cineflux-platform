@@ -195,3 +195,128 @@ docker compose exec -T trino trino --execute \
           count(DISTINCT ROW(user_id, source_updated_timestamp)) AS version_keys
    FROM iceberg.silver.stg_users"
 ```
+
+## Flink Streaming Processing
+
+Flink reads Confluent-wire Avro records from Kafka, validates the contract, applies
+event-time controls, and writes five-minute PostgreSQL aggregates. Invalid records are sent
+to a replay-ready Kafka DLQ.
+
+```text
+Kafka playback_events
+-> contract validation and DLQ routing
+-> watermark, late-event handling, and event-id deduplication
+-> five-minute event-time windows
+-> PostgreSQL streaming.*
+```
+
+### Run
+
+```bash
+make flink-build
+make flink-up
+make flink-migrate
+make flink-submit FLINK_CONFIG=flink_optimized
+make generator-stream GENERATOR_CONFIG=flink_demo EXECUTION_ID=flink_optimized_001
+```
+
+Each benchmark uses a separate consumer group and versioned YAML configuration. Cancel the
+job and reset its Kafka and PostgreSQL data before repeating a run:
+
+```bash
+make flink-cancel FLINK_JOB_ID=<job-id>
+make flink-reset-data FLINK_CONFIG=flink_optimized
+```
+
+### Baseline And Burst Optimization
+
+**Problem.** The baseline used one task, row-level JDBC flushing, aligned checkpoints, and
+no late-event or duplicate filtering. The burst run increased operator parallelism to six,
+buffered JDBC writes, and enabled unaligned checkpoints.
+
+| Metric | Baseline | Burst optimized |
+|---|---:|---:|
+| Parallelism | 1 | 6 |
+| Backpressure | 3% | 0% |
+| Checkpoint maximum | 2.465 s | 1.127 s |
+| Kafka consumer lag | 61,114 | 0 after drain |
+| Approximately 310K records | 3m40s | 1m12s |
+
+| Baseline | Burst optimized |
+|---|---|
+| ![Baseline backpressure](assets/processing_jobs/flink/baseline/backpressure.png) | ![Burst-optimized backpressure](assets/processing_jobs/flink/burst_optimized/backpressure.png) |
+| ![Baseline checkpoint duration](assets/processing_jobs/flink/baseline/checkpoint_summary.png) | ![Burst-optimized checkpoint duration](assets/processing_jobs/flink/burst_optimized/checkpoint_summary.png) |
+| ![Baseline consumer lag](assets/processing_jobs/flink/baseline/consumer_lag.png) | ![Burst-optimized consumer lag](assets/processing_jobs/flink/burst_optimized/consumer_lag.png) |
+
+Configurations: [`flink_baseline.yaml`](../data_platform/flink_jobs/config/flink_baseline.yaml)
+and [`flink_burst_optimized.yaml`](../data_platform/flink_jobs/config/flink_burst_optimized.yaml).
+
+### Late Arrivals
+
+**Problem.** The stream config marks 5% of base events as 15-60 minutes late. The optimized
+job applies a 30-second production-time watermark and drops events whose payload event time
+is already behind that watermark.
+
+**Result.** Flink counted 24,202 dropped late events, or 4.84% of the 500,000 base events.
+
+![Late events dropped](assets/processing_jobs/flink/late_optimized/late_events_dropped.png)
+
+Configuration: [`flink_late_optimized.yaml`](../data_platform/flink_jobs/config/flink_late_optimized.yaml).
+
+### Duplicate Events
+
+**Problem.** Retry simulation repeats approximately 1.5% of event IDs. The optimized job
+keys records by `event_id` and stores seen IDs in checkpointed state with a 90-minute TTL.
+
+**Result.** At the capture point, Flink dropped 4,733 duplicates from 314,712 records, an
+observed rate of 1.504%.
+
+![Duplicate events dropped](assets/processing_jobs/flink/duplicates_optimized/duplicate_events_dropped.png)
+
+Configuration: [`flink_duplicates_optimized.yaml`](../data_platform/flink_jobs/config/flink_duplicates_optimized.yaml).
+
+### Windows, DLQ, And Recovery
+
+The final configuration combines parallelism, buffered sinks, a 30-second watermark,
+event-ID state, incremental RocksDB checkpoints, and MinIO checkpoint storage. Flink Table
+API uses configurable five-minute `TUMBLE` windows over `event_time` for both outputs; the
+implementation is in [`pipeline.py`](../data_platform/flink_jobs/src/flink_jobs/pipeline.py).
+
+PostgreSQL primary keys enforce idempotent upserts:
+
+| Table | Rows | Duplicate primary keys |
+|---|---:|---:|
+| `streaming.playback_metrics_5m` | 8,501 | 0 |
+| `streaming.content_popularity_5m` | 7,553 | 0 |
+
+Malformed records are encoded with the dedicated DLQ Avro contract. The captured run showed
+558 messages in `playback_events_dlq`, including the original payload, error details, source
+metadata, and replay count.
+
+| DLQ topic | Decoded DLQ message |
+|---|---|
+| ![DLQ topic](assets/processing_jobs/flink/optimized/dlq_topic.png) | ![Decoded DLQ message](assets/processing_jobs/flink/optimized/dlq_message.png) |
+
+Restarting the TaskManager preserved the same Job ID
+`cbf39a16e9becae4ff87f36a0d19c446`. The job returned to `RUNNING`, reported `Restored: 1`,
+and restored checkpoint `chk-7` from MinIO.
+
+| Job after recovery | Restored checkpoint |
+|---|---|
+| ![Job running after recovery](assets/processing_jobs/flink/optimized/overview_after_recovery.png) | ![Checkpoint restore detail](assets/processing_jobs/flink/optimized/checkpoint_restore_detail.png) |
+
+Final configuration: [`flink_optimized.yaml`](../data_platform/flink_jobs/config/flink_optimized.yaml).
+
+### Correctness Query
+
+```sql
+SELECT window_start, user_id, count(*)
+FROM streaming.playback_metrics_5m
+GROUP BY window_start, user_id
+HAVING count(*) > 1;
+
+SELECT window_start, content_id, count(*)
+FROM streaming.content_popularity_5m
+GROUP BY window_start, content_id
+HAVING count(*) > 1;
+```
