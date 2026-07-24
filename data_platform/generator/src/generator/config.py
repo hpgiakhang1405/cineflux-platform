@@ -131,6 +131,7 @@ class StreamConfig(StrictModel):
     base_event_count: int = Field(gt=0)
     base_rate_per_second: int = Field(gt=0)
     pace_events: bool
+    event_time_acceleration: float = Field(ge=1.0)
     duplicate_rate: float = Field(ge=0.0, lt=1.0)
     late_arrival_rate: float = Field(ge=0.0, le=1.0)
     late_arrival_min_seconds: int = Field(ge=0)

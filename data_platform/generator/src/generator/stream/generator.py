@@ -72,7 +72,8 @@ class StreamDataGenerator:
         """Generate one validated base event and its problem flags."""
         scheduled = self._schedule.at(index)
         produced = self._shared.cutover_timestamp.astimezone(UTC) + timedelta(
-            hours=2, seconds=scheduled.offset_seconds
+            hours=2,
+            seconds=scheduled.offset_seconds * self._stream.event_time_acceleration,
         )
         is_late = index in self._late_indexes
         if is_late:

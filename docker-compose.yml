@@ -80,10 +80,29 @@ x-spark-image: &spark-image
       HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
       AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
 
+x-flink-image: &flink-image
+  image: ${FLINK_JOBS_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/flink_jobs/Dockerfile
+    args:
+      FLINK_BASE_IMAGE: ${FLINK_IMAGE}
+      UV_IMAGE: ${UV_IMAGE}
+      PYTHON_VERSION: ${FLINK_PYTHON_VERSION}
+      FLINK_VERSION: ${FLINK_VERSION}
+      FLINK_KAFKA_CONNECTOR_VERSION: ${FLINK_KAFKA_CONNECTOR_VERSION}
+      FLINK_JDBC_CONNECTOR_VERSION: ${FLINK_JDBC_CONNECTOR_VERSION}
+      POSTGRES_JDBC_VERSION: ${POSTGRES_JDBC_VERSION}
+      ROCKSDB_JAR_SHA1: ${ROCKSDB_JAR_SHA1}
+      KAFKA_CONNECTOR_JAR_SHA1: ${KAFKA_CONNECTOR_JAR_SHA1}
+      JDBC_CONNECTOR_JAR_SHA1: ${JDBC_CONNECTOR_JAR_SHA1}
+      POSTGRES_JDBC_JAR_SHA1: ${POSTGRES_JDBC_JAR_SHA1}
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE}
-    profiles: [storage, processing, spark-processing, orchestration, analytics, governance]
+    profiles: [storage, processing, spark-processing, flink-processing, orchestration, analytics, governance]
     restart: unless-stopped
     environment: *postgres-environment
     ports:
@@ -91,6 +110,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./schemas/postgresql:/platform-migrations:ro
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U ${POSTGRES_USER} -d ${CINEFLUX_POSTGRES_DB}"]
       interval: 5s
@@ -101,7 +121,7 @@ services:
 
   minio:
     image: ${MINIO_IMAGE}
-    profiles: [storage, processing, spark-processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, analytics, generator-batch]
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -123,7 +143,7 @@ services:
 
   minio-init:
     image: ${MINIO_MC_IMAGE}
-    profiles: [storage, processing, spark-processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, analytics, generator-batch]
     restart: "no"
     depends_on:
       minio:
@@ -147,7 +167,7 @@ services:
 
   kafka:
     image: ${KAFKA_IMAGE}
-    profiles: [messaging, processing, governance, generator-stream]
+    profiles: [messaging, processing, flink-processing, governance, generator-stream]
     restart: unless-stopped
     environment:
       CLUSTER_ID: ${KAFKA_CLUSTER_ID}
@@ -179,7 +199,7 @@ services:
 
   schema-registry:
     image: ${SCHEMA_REGISTRY_IMAGE}
-    profiles: [messaging, processing, governance, generator-stream]
+    profiles: [messaging, processing, flink-processing, governance, generator-stream]
     restart: unless-stopped
     depends_on:
       kafka:
@@ -200,7 +220,7 @@ services:
 
   kafka-ui:
     image: ${KAFKA_UI_IMAGE}
-    profiles: [messaging, processing]
+    profiles: [messaging, processing, flink-processing]
     restart: unless-stopped
     depends_on:
       kafka:
@@ -445,17 +465,41 @@ services:
     networks: [cineflux-network]
 
   flink-jobmanager:
-    image: ${FLINK_IMAGE}
-    profiles: [processing]
+    <<: *flink-image
+    profiles: [processing, flink-processing]
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
     command: jobmanager
     environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_STREAMING_SCHEMA: ${POSTGRES_STREAMING_SCHEMA}
+      MINIO_CHECKPOINT_BUCKET: ${MINIO_CHECKPOINT_BUCKET}
+      PLAYBACK_AVRO_SCHEMA_PATH: ${PLAYBACK_AVRO_SCHEMA_PATH}
+      PLAYBACK_DLQ_AVRO_SCHEMA_PATH: ${PLAYBACK_DLQ_AVRO_SCHEMA_PATH}
+      PYFLINK_PYTHON_EXECUTABLE: ${PYFLINK_PYTHON_EXECUTABLE}
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         rest.address: 0.0.0.0
-        taskmanager.numberOfTaskSlots: 2
-        parallelism.default: 2
-        execution.checkpointing.interval: 60s
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS}
+        parallelism.default: ${FLINK_DEFAULT_PARALLELISM}
+        s3.endpoint: ${MINIO_ENDPOINT}
+        s3.path.style.access: true
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.connection.ssl.enabled: false
     ports:
       - "${FLINK_UI_PORT}:8081"
     healthcheck:
@@ -467,18 +511,26 @@ services:
     networks: [cineflux-network]
 
   flink-taskmanager:
-    image: ${FLINK_IMAGE}
-    profiles: [processing]
+    <<: *flink-image
+    profiles: [processing, flink-processing]
     restart: unless-stopped
     depends_on:
       flink-jobmanager:
         condition: service_healthy
     command: taskmanager
     environment:
+      PYFLINK_PYTHON_EXECUTABLE: ${PYFLINK_PYTHON_EXECUTABLE}
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 2
-        parallelism.default: 2
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS}
+        parallelism.default: ${FLINK_DEFAULT_PARALLELISM}
+        s3.endpoint: ${MINIO_ENDPOINT}
+        s3.path.style.access: true
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.connection.ssl.enabled: false
+    volumes:
+      - flink-state:/opt/flink/state
     healthcheck:
       test: [CMD-SHELL, "curl --fail --silent http://flink-jobmanager:8081/taskmanagers | grep -q taskmanagers"]
       interval: 10s
@@ -768,5 +820,6 @@ volumes:
   minio-data:
   kafka-data:
   spark-events:
+  flink-state:
   airflow-logs:
   elasticsearch-data:

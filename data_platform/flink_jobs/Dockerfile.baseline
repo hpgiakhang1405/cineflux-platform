@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1.7
+
+ARG FLINK_BASE_IMAGE
+ARG UV_IMAGE
+FROM ${UV_IMAGE} AS uv
+FROM ${FLINK_BASE_IMAGE}
+ARG PYTHON_VERSION
+ARG FLINK_VERSION
+ARG FLINK_KAFKA_CONNECTOR_VERSION
+ARG FLINK_JDBC_CONNECTOR_VERSION
+ARG POSTGRES_JDBC_VERSION
+ARG ROCKSDB_JAR_SHA1
+ARG KAFKA_CONNECTOR_JAR_SHA1
+ARG JDBC_CONNECTOR_JAR_SHA1
+ARG POSTGRES_JDBC_JAR_SHA1
+COPY --from=uv /uv /uvx /bin/
+USER root
+WORKDIR /app
+ENV UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PROJECT_ENVIRONMENT=/opt/flink/venv
+COPY data_platform/flink_jobs .
+RUN uv python install "${PYTHON_VERSION}" \
+    && uv sync --frozen --no-dev \
+    && curl -fsSL "https://repo1.maven.org/maven2/org/apache/flink/flink-statebackend-rocksdb/${FLINK_VERSION}/flink-statebackend-rocksdb-${FLINK_VERSION}.jar" -o "/opt/flink/lib/flink-statebackend-rocksdb-${FLINK_VERSION}.jar" \
+    && echo "${ROCKSDB_JAR_SHA1}  /opt/flink/lib/flink-statebackend-rocksdb-${FLINK_VERSION}.jar" | sha1sum -c - \
+    && curl -fsSL "https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/${FLINK_KAFKA_CONNECTOR_VERSION}/flink-sql-connector-kafka-${FLINK_KAFKA_CONNECTOR_VERSION}.jar" -o "/opt/flink/lib/flink-sql-connector-kafka-${FLINK_KAFKA_CONNECTOR_VERSION}.jar" \
+    && echo "${KAFKA_CONNECTOR_JAR_SHA1}  /opt/flink/lib/flink-sql-connector-kafka-${FLINK_KAFKA_CONNECTOR_VERSION}.jar" | sha1sum -c - \
+    && curl -fsSL "https://repo1.maven.org/maven2/org/apache/flink/flink-connector-jdbc/${FLINK_JDBC_CONNECTOR_VERSION}/flink-connector-jdbc-${FLINK_JDBC_CONNECTOR_VERSION}.jar" -o "/opt/flink/lib/flink-connector-jdbc-${FLINK_JDBC_CONNECTOR_VERSION}.jar" \
+    && echo "${JDBC_CONNECTOR_JAR_SHA1}  /opt/flink/lib/flink-connector-jdbc-${FLINK_JDBC_CONNECTOR_VERSION}.jar" | sha1sum -c - \
+    && curl -fsSL "https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_JDBC_VERSION}/postgresql-${POSTGRES_JDBC_VERSION}.jar" -o "/opt/flink/lib/postgresql-${POSTGRES_JDBC_VERSION}.jar" \
+    && echo "${POSTGRES_JDBC_JAR_SHA1}  /opt/flink/lib/postgresql-${POSTGRES_JDBC_VERSION}.jar" | sha1sum -c - \
+    && mkdir -p /opt/flink/plugins/s3-fs-hadoop /opt/flink/state \
+    && cp "/opt/flink/opt/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" /opt/flink/plugins/s3-fs-hadoop/ \
+    && chown -R flink:flink /app /opt/python /opt/flink/venv /opt/flink/state
+COPY --chown=flink:flink schemas/avro/playback_events_v1.avsc /app/schemas/playback_events_v1.avsc
+COPY --chown=flink:flink schemas/avro/playback_events_dlq_v1.avsc /app/schemas/playback_events_dlq_v1.avsc
+ENV PATH="/opt/flink/venv/bin:${PATH}" \
+    PYFLINK_CLIENT_EXECUTABLE=/opt/flink/venv/bin/python \
+    PYTHONUNBUFFERED=1
+USER flink

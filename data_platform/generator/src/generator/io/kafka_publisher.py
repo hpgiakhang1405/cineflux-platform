@@ -97,6 +97,7 @@ class KafkaEventPublisher:
             self._topic,
             key=envelope.event.session_id.encode(),
             value=payload,
+            timestamp=envelope.event.produced_timestamp,
             headers=headers,
             on_delivery=self._on_delivery,
         )

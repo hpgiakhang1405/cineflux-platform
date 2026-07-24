@@ -17,7 +17,8 @@ Each scenario has shared, batch, and stream YAML files under `config/`. The shar
 defines the seed, cutover timestamp, and entity ranges. Batch and stream files independently
 define their volumes and problem rates.
 
-Use `smoke` for fast checks and `demo` for downstream processing volume.
+Use `smoke` for fast checks, `demo` for general downstream processing volume, and
+`flink_demo` for paced five-minute event-time benchmarks.
 
 ## Build And Run
 

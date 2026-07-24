@@ -3,15 +3,18 @@ SHELL := /bin/bash
 -include .env
 
 COMPOSE := docker compose
-PROFILES := messaging storage processing spark-processing orchestration analytics governance generator-batch generator-stream
+PROFILES := messaging storage processing spark-processing flink-processing orchestration analytics governance generator-batch generator-stream
 GENERATOR_CONFIG ?= smoke
 SPARK_CONFIG ?=
+FLINK_CONFIG ?=
+FLINK_JOB_ID ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help env check-local-env check-profile check-service check-delivery check-execution-id check-pipeline-run-id check-spark-config config up ps logs stop \
+.PHONY: help env check-local-env check-profile check-service check-delivery check-execution-id check-pipeline-run-id check-spark-config check-flink-config check-flink-job-id config up ps logs stop \
 	generator-build generator-build-baseline generator-bootstrap generator-batch \
-	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2
+	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2 \
+	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data
 
 help:
 	@printf '%s\n' \
@@ -26,12 +29,19 @@ help:
 		'  make generator-build-baseline' \
 		'  make generator-bootstrap GENERATOR_CONFIG=smoke|demo' \
 		'  make generator-batch GENERATOR_CONFIG=smoke|demo DELIVERY=delivery_001' \
-		'  make generator-stream GENERATOR_CONFIG=smoke|demo EXECUTION_ID=<id>' \
+		'  make generator-stream GENERATOR_CONFIG=smoke|demo|flink_demo EXECUTION_ID=<id>' \
 		'  make spark-build' \
 		'  make spark-build-baseline' \
 		'  make spark-up' \
 		'  make spark-dp1 SPARK_CONFIG=spark_dp1_smoke PIPELINE_RUN_ID=<id>' \
 		'  make spark-dp2 SPARK_CONFIG=spark_dp2_smoke PIPELINE_RUN_ID=<id>' \
+		'  make flink-build' \
+		'  make flink-build-baseline' \
+		'  make flink-up' \
+		'  make flink-migrate' \
+		'  make flink-submit FLINK_CONFIG=flink_smoke' \
+		'  make flink-cancel FLINK_JOB_ID=<job-id>' \
+		'  make flink-reset-data FLINK_CONFIG=flink_smoke' \
 		'' \
 		'Profiles: $(PROFILES)'
 
@@ -85,6 +95,22 @@ check-spark-config:
 	fi
 	@if [[ ! -f "data_platform/spark_jobs/config/$(SPARK_CONFIG).yaml" ]]; then \
 		echo "Unknown Spark config: $(SPARK_CONFIG)" >&2; \
+		exit 1; \
+	fi
+
+check-flink-config:
+	@if [[ -z "$(FLINK_CONFIG)" ]]; then \
+		echo 'FLINK_CONFIG is required. Run make help for usage.' >&2; \
+		exit 1; \
+	fi
+	@if [[ ! -f "data_platform/flink_jobs/config/$(FLINK_CONFIG).yaml" ]]; then \
+		echo "Unknown Flink config: $(FLINK_CONFIG)" >&2; \
+		exit 1; \
+	fi
+
+check-flink-job-id:
+	@if [[ -z "$(FLINK_JOB_ID)" ]]; then \
+		echo 'FLINK_JOB_ID is required. Run make help for usage.' >&2; \
 		exit 1; \
 	fi
 
@@ -155,3 +181,68 @@ spark-dp2: check-spark-config check-pipeline-run-id
 	@$(COMPOSE) --profile spark-processing run --rm --no-deps --use-aliases spark-jobs \
 		dp2 --config "/app/config/$(SPARK_CONFIG).yaml" \
 		--run-id "$(PIPELINE_RUN_ID)"
+
+flink-build:
+	@$(COMPOSE) --profile flink-processing build flink-jobmanager
+
+flink-build-baseline: check-local-env
+	@docker build \
+		--build-arg FLINK_BASE_IMAGE="$(FLINK_IMAGE)" \
+		--build-arg UV_IMAGE="$(UV_IMAGE)" \
+		--build-arg PYTHON_VERSION="$(FLINK_PYTHON_VERSION)" \
+		--build-arg FLINK_VERSION="$(FLINK_VERSION)" \
+		--build-arg FLINK_KAFKA_CONNECTOR_VERSION="$(FLINK_KAFKA_CONNECTOR_VERSION)" \
+		--build-arg FLINK_JDBC_CONNECTOR_VERSION="$(FLINK_JDBC_CONNECTOR_VERSION)" \
+		--build-arg POSTGRES_JDBC_VERSION="$(POSTGRES_JDBC_VERSION)" \
+		--build-arg ROCKSDB_JAR_SHA1="$(ROCKSDB_JAR_SHA1)" \
+		--build-arg KAFKA_CONNECTOR_JAR_SHA1="$(KAFKA_CONNECTOR_JAR_SHA1)" \
+		--build-arg JDBC_CONNECTOR_JAR_SHA1="$(JDBC_CONNECTOR_JAR_SHA1)" \
+		--build-arg POSTGRES_JDBC_JAR_SHA1="$(POSTGRES_JDBC_JAR_SHA1)" \
+		-f data_platform/flink_jobs/Dockerfile.baseline \
+		-t "$(FLINK_JOBS_BASELINE_IMAGE)" .
+
+flink-up:
+	@$(COMPOSE) --profile flink-processing up -d \
+		postgres minio minio-init kafka schema-registry kafka-ui \
+		flink-jobmanager flink-taskmanager
+
+flink-migrate:
+	@$(COMPOSE) --profile flink-processing exec -T postgres \
+		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
+		--set=streaming_schema="$(POSTGRES_STREAMING_SCHEMA)" \
+		--set=ON_ERROR_STOP=1 \
+		--file=/platform-migrations/001_streaming_tables.sql
+
+flink-submit: check-flink-config
+	@$(COMPOSE) --profile flink-processing exec -T flink-jobmanager \
+		flink run --detached --python /app/src/flink_jobs/cli.py \
+		--config "/app/config/$(FLINK_CONFIG).yaml"
+
+flink-cancel: check-flink-job-id
+	@$(COMPOSE) --profile flink-processing exec -T flink-jobmanager \
+		flink cancel "$(FLINK_JOB_ID)"
+
+flink-reset-data: check-flink-config
+	@for attempt in {1..10}; do \
+		if ! curl --fail --silent "http://localhost:$(FLINK_UI_PORT)/jobs/overview" \
+			| grep -Eq '"state":"(CREATED|INITIALIZING|RUNNING|FAILING|RESTARTING|CANCELLING)"'; then \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo 'Cancel active Flink jobs before resetting benchmark data.' >&2; \
+	exit 1
+	@source_topic="$$(sed -n 's/^  source_topic: //p' "data_platform/flink_jobs/config/$(FLINK_CONFIG).yaml" | head -n 1)"; \
+	consumer_group="$$(sed -n 's/^  consumer_group: //p' "data_platform/flink_jobs/config/$(FLINK_CONFIG).yaml" | head -n 1)"; \
+	dlq_topic="$$(sed -n 's/^  dlq_topic: //p' "data_platform/flink_jobs/config/$(FLINK_CONFIG).yaml" | head -n 1)"; \
+	$(COMPOSE) --profile flink-processing exec -T kafka \
+		kafka-topics --bootstrap-server "$(KAFKA_BOOTSTRAP_SERVERS)" --delete --if-exists --topic "$$source_topic"; \
+	$(COMPOSE) --profile flink-processing exec -T kafka \
+		kafka-topics --bootstrap-server "$(KAFKA_BOOTSTRAP_SERVERS)" --delete --if-exists --topic "$$dlq_topic"; \
+	$(COMPOSE) --profile flink-processing exec -T kafka \
+		kafka-consumer-groups --bootstrap-server "$(KAFKA_BOOTSTRAP_SERVERS)" --delete \
+		--group "$$consumer_group" >/dev/null 2>&1 || true; \
+	$(COMPOSE) --profile flink-processing exec -T postgres \
+		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
+		--set=ON_ERROR_STOP=1 \
+		--command "TRUNCATE $(POSTGRES_STREAMING_SCHEMA).playback_metrics_5m, $(POSTGRES_STREAMING_SCHEMA).content_popularity_5m;"

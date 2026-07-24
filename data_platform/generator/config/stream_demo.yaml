@@ -5,6 +5,7 @@ partitions: 6
 base_event_count: 250000
 base_rate_per_second: 2000
 pace_events: true
+event_time_acceleration: 1.0
 duplicate_rate: 0.015
 late_arrival_rate: 0.05
 late_arrival_min_seconds: 900

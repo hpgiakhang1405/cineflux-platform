@@ -1,0 +1,35 @@
+job_name: cineflux-flink-smoke
+kafka:
+  source_topic: playback_events
+  source_partitions: 6
+  consumer_group: cineflux-flink-smoke
+  dlq_topic: playback_events_dlq
+  dlq_partitions: 6
+  startup_mode: earliest-offset
+outputs:
+  playback_metrics_table: playback_metrics_5m
+  content_popularity_table: content_popularity_5m
+processing:
+  parallelism: 2
+  window_minutes: 5
+  watermark_seconds: 30
+  source_idle_timeout_seconds: 10
+  late_handling_enabled: true
+  dedup_enabled: true
+  dedup_ttl_minutes: 90
+checkpoint:
+  interval_ms: 10000
+  timeout_ms: 60000
+  min_pause_ms: 1000
+  max_concurrent: 1
+  tolerable_failures: 2
+  unaligned_enabled: true
+state:
+  backend: rocksdb
+  incremental: true
+jdbc:
+  buffer_flush_max_rows: 100
+  buffer_flush_interval_ms: 1000
+  max_retries: 3
+restart_attempts: 3
+restart_delay_ms: 5000
