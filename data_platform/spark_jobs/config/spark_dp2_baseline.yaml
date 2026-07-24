@@ -1,0 +1,14 @@
+job_name: cineflux-dp2-baseline
+spark:
+  shuffle_partitions: 8
+  adaptive_enabled: false
+  broadcast_threshold_bytes: -1
+bronze:
+  namespace: bronze
+silver:
+  namespace: silver
+dedup_strategy: window
+session_shuffle_partitions: 2
+skew_strategy: direct
+skew_salt_buckets: 16
+completion_threshold: 0.9

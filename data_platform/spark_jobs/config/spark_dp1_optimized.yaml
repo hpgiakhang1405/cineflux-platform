@@ -1,0 +1,13 @@
+job_name: cineflux-dp1-explicit-schema-optimized
+spark:
+  shuffle_partitions: 8
+  adaptive_enabled: false
+  broadcast_threshold_bytes: -1
+landing:
+  scenario: demo
+  bootstrap_prefix: bootstrap/initial_historical_playback_events
+  recurring_prefix: recurring
+bronze:
+  namespace: bronze
+schema_strategy: explicit
+source_system: cineflux_generator

@@ -16,4 +16,16 @@ RUN wget -q \
 
 FROM ${HIVE_IMAGE}
 
+USER root
 COPY --from=jdbc-driver /postgresql.jar /opt/hive/lib/postgresql.jar
+COPY docker/hive_metastore/core-site.xml /opt/hadoop/etc/hadoop/core-site.xml
+COPY docker/hive_metastore/entrypoint.sh /entrypoint.sh
+RUN rm /opt/hive/lib/postgresql-9.4.1208.jre7.jar \
+    && chmod 755 /entrypoint.sh \
+    && cp /opt/hadoop/share/hadoop/tools/lib/hadoop-aws-*.jar /opt/hive/lib/ \
+    && cp /opt/hadoop/share/hadoop/tools/lib/aws-java-sdk-bundle-*.jar /opt/hive/lib/ \
+    && chown hive:hive /opt/hive/lib/postgresql.jar \
+        /opt/hive/lib/hadoop-aws-*.jar \
+        /opt/hive/lib/aws-java-sdk-bundle-*.jar \
+        /opt/hadoop/etc/hadoop/core-site.xml
+USER hive

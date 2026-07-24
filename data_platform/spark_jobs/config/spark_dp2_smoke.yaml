@@ -1,0 +1,14 @@
+job_name: cineflux-dp2-smoke
+spark:
+  shuffle_partitions: 4
+  adaptive_enabled: false
+  broadcast_threshold_bytes: -1
+bronze:
+  namespace: bronze_smoke
+silver:
+  namespace: silver_smoke
+dedup_strategy: window
+session_shuffle_partitions: 4
+skew_strategy: salted
+skew_salt_buckets: 4
+completion_threshold: 0.9

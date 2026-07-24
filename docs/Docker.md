@@ -192,52 +192,44 @@ Every first-party deployable component must follow these rules:
 8. Verify downloaded build artifacts with a checksum when possible.
 9. Use underscore-separated repository directories and hyphen-separated Compose service
    names.
+10. Keep `Dockerfile.baseline` for first-party image-size comparison and use `Dockerfile`
+    as the optimized Compose runtime.
+
+Application Dockerfiles stay with their owning component, next to its source, lockfile,
+and configuration. Dockerfiles that only extend third-party infrastructure images stay
+under `docker/<service>/`. Compose orchestration remains at the repository root.
 
 The current compatibility images are intentionally small extensions of pinned upstream
 images:
 
-- `cineflux/hive-metastore:4.1.0` adds a checksum-verified PostgreSQL JDBC driver.
+- `cineflux/hive-metastore:3.1.3` adds a checksum-verified PostgreSQL JDBC driver,
+  MinIO S3A support, and idempotent metastore schema initialization.
 - `cineflux/superset:4.1.4` adds pinned PostgreSQL and Trino Python drivers, then returns to
   the upstream `superset` user.
 
 Both custom images use `pull_policy: build`. They are built locally and are not pulled from
 a public `cineflux/*` registry namespace.
 
-## Data Generator Image Optimization
+## Docker Image Optimization
 
-The Data Generator is the first first-party image with a baseline and optimized build:
+Baseline images exist only for image-size comparison. Compose services and processing
+benchmarks always use the optimized image.
 
-| Image | Dockerfile | Dependency set | Runtime base | Measured size |
-|---|---|---|---|---|
-| `cineflux/data-generator:baseline` | `data_platform/generator/Dockerfile.baseline` | Runtime dependencies in a single build stage | `python:3.14.5-bookworm` | 1.97 GB |
-| `cineflux/data-generator:0.1.0` | `data_platform/generator/Dockerfile` | Runtime dependencies only | `python:3.14.5-slim-bookworm` | 633 MB |
+| Component | Baseline image | Optimized image | Reduction | Main optimization |
+|---|---:|---:|---:|---|
+| Data Generator | 1.97 GB | 633 MB | 67.9% | Multistage wheel build, slim runtime, and non-root user |
+| Spark Jobs | 5.24 GB | 2.63 GB | 49.8% | Dedicated dependency stages and reuse of the Spark runtime PySpark installation |
 
-The optimized image uses a multistage build, a slim runtime base, a non-editable wheel, and a
-non-root `cineflux` user. Only the locked virtual environment, runtime configuration, and
-Avro contract are copied into the final stage.
-
-The two Compose services use `pull_policy: never` because this first-party image is built
-locally with `make generator-build` and is not published to a registry.
-
-Reproduce the comparison:
+Reproduce the measurements with the pinned images and lockfiles:
 
 ```bash
-make generator-build-baseline
-make generator-build
-docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}" \
-  | grep 'cineflux/data-generator'
+make generator-build-baseline generator-build
+make spark-build-baseline spark-build
+docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}" | grep cineflux
 ```
 
-```console
-cineflux/data-generator:baseline    1.97GB
-cineflux/data-generator:0.1.0       633MB
-```
-
-The optimized image saves approximately `1.337 GB`, a `67.9%` reduction:
-
-```text
-(1.97 GB - 0.633 GB) / 1.97 GB * 100 = 67.9%
-```
+Future first-party components add one row to this table instead of creating a separate
+optimization section.
 
 ## Image Listing
 

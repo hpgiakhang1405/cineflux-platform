@@ -66,10 +66,24 @@ x-data-generator-common: &data-generator-common
   command: [--help]
   networks: [cineflux-network]
 
+x-spark-image: &spark-image
+  image: ${SPARK_JOBS_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/spark_jobs/Dockerfile
+    args:
+      ALPINE_IMAGE: ${ALPINE_IMAGE}
+      SPARK_IMAGE: ${SPARK_IMAGE}
+      UV_IMAGE: ${UV_IMAGE}
+      ICEBERG_VERSION: ${ICEBERG_VERSION}
+      HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
+      AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE}
-    profiles: [storage, processing, orchestration, analytics, governance]
+    profiles: [storage, processing, spark-processing, orchestration, analytics, governance]
     restart: unless-stopped
     environment: *postgres-environment
     ports:
@@ -87,7 +101,7 @@ services:
 
   minio:
     image: ${MINIO_IMAGE}
-    profiles: [storage, processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, analytics, generator-batch]
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -109,7 +123,7 @@ services:
 
   minio-init:
     image: ${MINIO_MC_IMAGE}
-    profiles: [storage, processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, analytics, generator-batch]
     restart: "no"
     depends_on:
       minio:
@@ -233,7 +247,7 @@ services:
 
   hive-metastore:
     image: ${HIVE_METASTORE_IMAGE}
-    profiles: [storage, processing, analytics]
+    profiles: [storage, processing, spark-processing, analytics]
     pull_policy: build
     build:
       context: .
@@ -250,17 +264,15 @@ services:
     environment:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       SERVICE_OPTS: >-
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
         -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://${POSTGRES_ENDPOINT}/${HIVE_METASTORE_DB}
         -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
         -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
         -Dmetastore.warehouse.dir=s3a://${MINIO_WAREHOUSE_BUCKET}/
-        -Dfs.s3a.endpoint=${MINIO_ENDPOINT}
-        -Dfs.s3a.path.style.access=true
-        -Dfs.s3a.connection.ssl.enabled=false
-        -Dfs.s3a.access.key=${MINIO_ROOT_USER}
-        -Dfs.s3a.secret.key=${MINIO_ROOT_PASSWORD}
     ports:
       - "${HIVE_METASTORE_PORT}:9083"
     healthcheck:
@@ -273,7 +285,7 @@ services:
 
   trino:
     image: ${TRINO_IMAGE}
-    profiles: [storage, processing, analytics]
+    profiles: [storage, processing, spark-processing, analytics]
     restart: unless-stopped
     depends_on:
       hive-metastore:
@@ -304,7 +316,7 @@ services:
 
   spark-events-init:
     image: ${ALPINE_IMAGE}
-    profiles: [processing]
+    profiles: [processing, spark-processing]
     restart: "no"
     command: [/bin/sh, -c, "chmod 0777 /opt/spark/events"]
     volumes:
@@ -312,8 +324,8 @@ services:
     networks: [cineflux-network]
 
   spark-master:
-    image: ${SPARK_IMAGE}
-    profiles: [processing]
+    <<: *spark-image
+    profiles: [processing, spark-processing]
     restart: unless-stopped
     depends_on:
       spark-events-init:
@@ -340,8 +352,8 @@ services:
     networks: [cineflux-network]
 
   spark-worker:
-    image: ${SPARK_IMAGE}
-    profiles: [processing]
+    <<: *spark-image
+    profiles: [processing, spark-processing]
     restart: unless-stopped
     depends_on:
       spark-master:
@@ -352,8 +364,8 @@ services:
       - spark://spark-master:7077
     environment:
       SPARK_NO_DAEMONIZE: "true"
-      SPARK_WORKER_CORES: 2
-      SPARK_WORKER_MEMORY: 2g
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES}
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY}
     volumes:
       - spark-events:/opt/spark/events
       - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
@@ -366,8 +378,8 @@ services:
     networks: [cineflux-network]
 
   spark-history-server:
-    image: ${SPARK_IMAGE}
-    profiles: [processing]
+    <<: *spark-image
+    profiles: [processing, spark-processing]
     restart: unless-stopped
     depends_on:
       spark-events-init:
@@ -390,6 +402,46 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+    networks: [cineflux-network]
+
+  spark-jobs:
+    <<: *spark-image
+    profiles: [processing, spark-processing]
+    restart: "no"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+      HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_LANDING_BUCKET: ${MINIO_LANDING_BUCKET}
+      MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+      CUTOVER_TIMESTAMP: ${CUTOVER_TIMESTAMP}
+      ICEBERG_CATALOG_NAME: ${ICEBERG_CATALOG_NAME}
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - ${SPARK_MASTER_URL}
+      - --deploy-mode
+      - client
+      - --conf
+      - spark.driver.memory=${SPARK_DRIVER_MEMORY}
+      - --conf
+      - spark.driver.host=spark-jobs
+      - --conf
+      - spark.driver.bindAddress=0.0.0.0
+      - /app/src/spark_jobs/cli.py
+    command: [--help]
+    volumes:
+      - spark-events:/opt/spark/events
+      - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
     networks: [cineflux-network]
 
   flink-jobmanager:

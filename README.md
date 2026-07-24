@@ -1,4 +1,4 @@
-# CineFlux
+# CineFlux - Movie Streaming Data & Intelligence Platform
 
 CineFlux is an end-to-end **Data & Intelligence Platform** for the movie-streaming domain. It models the backend capabilities required to collect, process, organize, analyze, and operationalize large-scale streaming data.
 
@@ -41,6 +41,8 @@ Phase 1 focuses on the data-platform foundation:
 
 - [Data Generator](data_platform/generator/README.md) produces deterministic batch files in
   MinIO and playback event streams in Kafka.
+- [Spark Processing Jobs](data_platform/spark_jobs/README.md) ingest landing files into
+  append-only Bronze tables and rebuild validated Silver tables.
 
 ## Documentation
 
