@@ -64,8 +64,8 @@ automatic broadcast joins disabled.
 
 | Baseline | Optimized |
 |---|---|
-| ![DP1 schema merge baseline](assets/processing_jobs/dp1_baseline/overview.png) | ![DP1 explicit schema](assets/processing_jobs/dp1_optimized/overview.png) |
-| ![DP1 baseline stages](assets/processing_jobs/dp1_baseline/stages.png) | ![DP1 optimized stages](assets/processing_jobs/dp1_optimized/stages.png) |
+| ![DP1 schema merge baseline](assets/processing_jobs/spark/dp1_baseline/overview.png) | ![DP1 explicit schema](assets/processing_jobs/spark/dp1_optimized/overview.png) |
+| ![DP1 baseline stages](assets/processing_jobs/spark/dp1_baseline/stages.png) | ![DP1 optimized stages](assets/processing_jobs/spark/dp1_optimized/stages.png) |
 
 ## DP2: Correctness
 
@@ -77,7 +77,7 @@ automatic broadcast joins disabled.
 | `stg_playback_events` | 5,000,000 | 5,000,000 | 102,060 duplicates removed |
 | `int_playback_sessions` | 1,666,760 | 1,666,760 | No duplicate session grain |
 
-![DP2 baseline stages](assets/processing_jobs/dp2_baseline/stages.png)
+![DP2 baseline stages](assets/processing_jobs/spark/dp2_baseline/stages.png)
 
 ## Skew Optimization
 
@@ -101,11 +101,11 @@ aggregation.
 
 | Baseline city | Optimized city |
 |---|---|
-| ![Direct city aggregation](assets/processing_jobs/dp2_baseline/stage_54.png) | ![Salted city aggregation](assets/processing_jobs/dp2_skew_optimized/stage_54.png) |
+| ![Direct city aggregation](assets/processing_jobs/spark/dp2_baseline/stage_54.png) | ![Salted city aggregation](assets/processing_jobs/spark/dp2_skew_optimized/stage_54.png) |
 
 | Baseline genre | Optimized genre |
 |---|---|
-| ![Direct genre aggregation](assets/processing_jobs/dp2_baseline/stage_65.png) | ![Salted genre aggregation](assets/processing_jobs/dp2_skew_optimized/stage_68.png) |
+| ![Direct genre aggregation](assets/processing_jobs/spark/dp2_baseline/stage_65.png) | ![Salted genre aggregation](assets/processing_jobs/spark/dp2_skew_optimized/stage_68.png) |
 
 ## High-Cardinality Optimization
 
@@ -127,7 +127,7 @@ on one local executor, trading minor scheduling overhead for bounded task size.
 
 | Baseline | Optimized |
 |---|---|
-| ![Two session partitions](assets/processing_jobs/dp2_baseline/stage_22.png) | ![Thirty-two session partitions](assets/processing_jobs/dp2_cardinality_optimized/stage_22.png) |
+| ![Two session partitions](assets/processing_jobs/spark/dp2_baseline/stage_22.png) | ![Thirty-two session partitions](assets/processing_jobs/spark/dp2_cardinality_optimized/stage_22.png) |
 
 ## Duplicate Optimization
 
@@ -148,7 +148,7 @@ on one local executor, trading minor scheduling overhead for bounded task size.
 
 | Baseline | Optimized |
 |---|---|
-| ![Deduplication spill](assets/processing_jobs/dp2_baseline/stage_15.png) | ![Deduplication without spill](assets/processing_jobs/dp2_duplicates_optimized/stage_15.png) |
+| ![Deduplication spill](assets/processing_jobs/spark/dp2_baseline/stage_15.png) | ![Deduplication without spill](assets/processing_jobs/spark/dp2_duplicates_optimized/stage_15.png) |
 
 ## Combined Result
 
@@ -166,9 +166,9 @@ salted aggregation.
 
 | Baseline | Optimized |
 |---|---|
-| ![DP2 baseline](assets/processing_jobs/dp2_baseline/overview.png) | ![DP2 optimized](assets/processing_jobs/dp2_optimized/overview.png) |
-| ![Baseline deduplication](assets/processing_jobs/dp2_baseline/stage_15.png) | ![Optimized deduplication](assets/processing_jobs/dp2_optimized/stage_15.png) |
-| ![Baseline sessions](assets/processing_jobs/dp2_baseline/stage_22.png) | ![Optimized sessions](assets/processing_jobs/dp2_optimized/stage_22.png) |
+| ![DP2 baseline](assets/processing_jobs/spark/dp2_baseline/overview.png) | ![DP2 optimized](assets/processing_jobs/spark/dp2_optimized/overview.png) |
+| ![Baseline deduplication](assets/processing_jobs/spark/dp2_baseline/stage_15.png) | ![Optimized deduplication](assets/processing_jobs/spark/dp2_optimized/stage_15.png) |
+| ![Baseline sessions](assets/processing_jobs/spark/dp2_baseline/stage_22.png) | ![Optimized sessions](assets/processing_jobs/spark/dp2_optimized/stage_22.png) |
 
 ## Idempotency And Trino Validation
 

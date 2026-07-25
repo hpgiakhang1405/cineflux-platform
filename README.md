@@ -43,6 +43,8 @@ Phase 1 focuses on the data-platform foundation:
   MinIO and playback event streams in Kafka.
 - [Spark Processing Jobs](data_platform/spark_jobs/README.md) ingest landing files into
   append-only Bronze tables and rebuild validated Silver tables.
+- [Flink Streaming Jobs](data_platform/flink_jobs/README.md) validate Kafka playback events,
+  handle late and duplicate records, and upsert five-minute metrics into PostgreSQL.
 
 ## Documentation
 
