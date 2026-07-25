@@ -25,3 +25,4 @@ artifacts/
 *.swo
 .DS_Store
 Thumbs.db
+*:Zone.Identifier

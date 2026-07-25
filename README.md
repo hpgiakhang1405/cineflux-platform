@@ -35,7 +35,7 @@ Phase 1 focuses on the data-platform foundation:
 
 ## Deployment Architecture
 
-> **Deployment diagram placeholder.**
+![CineFlux data platform deployment architecture](docs/assets/architecture/data_platform_deployment_diagram.png)
 
 ## Components
 
