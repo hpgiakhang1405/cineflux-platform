@@ -15,6 +15,7 @@ FLINK_JOB_ID ?=
 	generator-build generator-build-baseline generator-bootstrap generator-batch \
 	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2 \
 	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data \
+	docker-image-benchmark \
 	dbt-build dbt-up dbt-debug dbt-smoke dbt-migrate dbt-run dbt-test dbt-docs dbt-docs-serve \
 	storage-prepare storage-lakehouse-files storage-lakehouse-benchmark storage-compact \
 	storage-index-reset storage-index-create storage-index-benchmark
@@ -40,6 +41,7 @@ help:
 		'  make spark-dp2 SPARK_CONFIG=spark_dp2_smoke PIPELINE_RUN_ID=<id>' \
 		'  make flink-build' \
 		'  make flink-build-baseline' \
+		'  make docker-image-benchmark' \
 		'  make flink-up' \
 		'  make flink-migrate' \
 		'  make flink-submit FLINK_CONFIG=flink_smoke' \
@@ -239,6 +241,25 @@ flink-build-baseline: check-local-env
 		--build-arg POSTGRES_JDBC_JAR_SHA1="$(POSTGRES_JDBC_JAR_SHA1)" \
 		-f data_platform/flink_jobs/Dockerfile.baseline \
 		-t "$(FLINK_JOBS_BASELINE_IMAGE)" .
+
+docker-image-benchmark: check-local-env
+	@measure() { \
+		component="$$1"; \
+		baseline_bytes="$$(docker image inspect --format '{{.Size}}' "$$2")"; \
+		optimized_bytes="$$(docker image inspect --format '{{.Size}}' "$$3")"; \
+		awk -v component="$$component" \
+			-v baseline_bytes="$$baseline_bytes" \
+			-v optimized_bytes="$$optimized_bytes" \
+			'BEGIN { \
+				printf "%-16s %14.1f %14.1f %11.1f%%\n", component, \
+					baseline_bytes / 1048576, optimized_bytes / 1048576, \
+					(baseline_bytes - optimized_bytes) * 100 / baseline_bytes \
+			}'; \
+	}; \
+	printf '%-16s %14s %14s %12s\n' 'Component' 'Baseline MiB' 'Optimized MiB' 'Reduction'; \
+	measure 'Data Generator' '$(DATA_GENERATOR_BASELINE_IMAGE)' '$(DATA_GENERATOR_IMAGE)'; \
+	measure 'Spark Jobs' '$(SPARK_JOBS_BASELINE_IMAGE)' '$(SPARK_JOBS_IMAGE)'; \
+	measure 'Flink Jobs' '$(FLINK_JOBS_BASELINE_IMAGE)' '$(FLINK_JOBS_IMAGE)'
 
 flink-up:
 	@$(COMPOSE) --profile flink-processing up -d \

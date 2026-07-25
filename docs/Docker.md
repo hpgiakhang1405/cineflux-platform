@@ -217,9 +217,13 @@ benchmarks always use the optimized image.
 
 | Component | Baseline image | Optimized image | Reduction | Main optimization |
 |---|---:|---:|---:|---|
-| Data Generator | 1.97 GB | 633 MB | 67.9% | Multistage wheel build, slim runtime, and non-root user |
-| Flink Jobs | 1.72 GB | 1.45 GB | 15.9% | Multistage dependency build and runtime-only application files |
-| Spark Jobs | 5.24 GB | 2.63 GB | 49.8% | Dedicated dependency stages and reuse of the Spark runtime PySpark installation |
+| Data Generator | 476.2 MiB | 138.3 MiB | 71.0% | Multistage wheel build, slim runtime, and non-root user |
+| Spark Jobs | 2,153.8 MiB | 947.1 MiB | 56.0% | Dedicated dependency stages and reuse of the Spark runtime PySpark installation |
+| Flink Jobs | 1,642.2 MiB | 1,381.3 MiB | 15.9% | Multistage dependency build and runtime-only application files |
+
+Both variants were built from the same source revision. Sizes use the image `.Size` field
+from `docker image inspect`, converted from bytes to MiB, so every component uses the same
+measurement method.
 
 Reproduce the measurements with the pinned images and lockfiles:
 
@@ -227,7 +231,7 @@ Reproduce the measurements with the pinned images and lockfiles:
 make generator-build-baseline generator-build
 make spark-build-baseline spark-build
 make flink-build-baseline flink-build
-docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}" | grep cineflux
+make docker-image-benchmark
 ```
 
 Future first-party components add one row to this table instead of creating a separate
