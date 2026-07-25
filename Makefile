@@ -15,7 +15,9 @@ FLINK_JOB_ID ?=
 	generator-build generator-build-baseline generator-bootstrap generator-batch \
 	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2 \
 	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data \
-	dbt-build dbt-up dbt-debug dbt-smoke dbt-migrate dbt-run dbt-test dbt-docs dbt-docs-serve
+	dbt-build dbt-up dbt-debug dbt-smoke dbt-migrate dbt-run dbt-test dbt-docs dbt-docs-serve \
+	storage-prepare storage-lakehouse-files storage-lakehouse-benchmark storage-compact \
+	storage-index-reset storage-index-create storage-index-benchmark
 
 help:
 	@printf '%s\n' \
@@ -52,6 +54,13 @@ help:
 		'  make dbt-test' \
 		'  make dbt-docs' \
 		'  make dbt-docs-serve' \
+		'  make storage-prepare PIPELINE_RUN_ID=<id>' \
+		'  make storage-lakehouse-files' \
+		'  make storage-lakehouse-benchmark' \
+		'  make storage-compact PIPELINE_RUN_ID=<id>' \
+		'  make storage-index-reset' \
+		'  make storage-index-create' \
+		'  make storage-index-benchmark' \
 		'' \
 		'Profiles: $(PROFILES)'
 
@@ -192,6 +201,26 @@ spark-dp2: check-spark-config check-pipeline-run-id
 		dp2 --config "/app/config/$(SPARK_CONFIG).yaml" \
 		--run-id "$(PIPELINE_RUN_ID)"
 
+storage-compact: check-pipeline-run-id
+	@$(COMPOSE) --profile spark-processing run --rm --no-deps --use-aliases spark-jobs \
+		compact --config "/app/config/storage_compaction.yaml" \
+		--run-id "$(PIPELINE_RUN_ID)"
+
+storage-prepare: check-pipeline-run-id
+	@$(COMPOSE) --profile spark-processing exec -T trino trino \
+		--execute "$$(< schemas/iceberg/benchmarks/reset_bronze_tables.sql)"
+	@$(COMPOSE) --profile spark-processing run --rm --no-deps --use-aliases spark-jobs \
+		dp1 --config "/app/config/storage_ingestion.yaml" \
+		--run-id "$(PIPELINE_RUN_ID)"
+
+storage-lakehouse-files:
+	@$(COMPOSE) --profile spark-processing exec -T trino trino --output-format ALIGNED \
+		--execute "$$(< schemas/iceberg/benchmarks/raw_playback_events_files.sql)"
+
+storage-lakehouse-benchmark:
+	@$(COMPOSE) --profile spark-processing exec -T trino trino --output-format ALIGNED \
+		--execute "$$(< schemas/iceberg/benchmarks/raw_playback_events_scan.sql)"
+
 flink-build:
 	@$(COMPOSE) --profile flink-processing build flink-jobmanager
 
@@ -290,3 +319,23 @@ dbt-docs:
 dbt-docs-serve:
 	@$(COMPOSE) --profile dbt-processing run --rm --service-ports dbt-jobs \
 		docs serve --host 0.0.0.0 --port 8080
+
+storage-index-reset:
+	@$(COMPOSE) --profile dbt-processing exec -T postgres \
+		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
+		--set=serving_schema="$(POSTGRES_SERVING_SCHEMA)" \
+		--set=ON_ERROR_STOP=1 \
+		--file=/platform-migrations/benchmarks/reset_mart_content_trending_score_index.sql
+
+storage-index-create:
+	@$(COMPOSE) --profile dbt-processing exec -T postgres \
+		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
+		--set=serving_schema="$(POSTGRES_SERVING_SCHEMA)" \
+		--set=ON_ERROR_STOP=1 \
+		--file=/platform-migrations/003_serving_indexes.sql
+
+storage-index-benchmark:
+	@$(COMPOSE) --profile dbt-processing exec -T postgres \
+		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
+		--set=ON_ERROR_STOP=1 \
+		--file=/platform-migrations/benchmarks/mart_content_trending_score.sql

@@ -64,6 +64,7 @@ class Dp1Config(StrictConfig):
     bronze: BronzeTables
     schema_strategy: Literal["merge", "explicit"]
     source_system: str
+    playback_write_batches: int = Field(default=1, gt=0)
 
 
 class Dp2Config(StrictConfig):
@@ -78,6 +79,26 @@ class Dp2Config(StrictConfig):
     skew_strategy: Literal["direct", "salted"]
     skew_salt_buckets: int = Field(gt=1)
     completion_threshold: float = Field(ge=0.0, le=1.0)
+
+
+class IcebergCompactionTable(StrictConfig):
+    """Identify one Iceberg table and its validation columns."""
+
+    namespace: str = Field(pattern=r"^[a-z0-9_]+$")
+    name: str = Field(pattern=r"^[a-z0-9_]+$")
+    business_key: str = Field(pattern=r"^[a-z0-9_]+$")
+    event_timestamp_column: str = Field(pattern=r"^[a-z0-9_]+$")
+
+
+class IcebergCompactionConfig(StrictConfig):
+    """Configure one reproducible Iceberg data-file rewrite."""
+
+    job_name: str
+    spark: SparkTuning
+    table: IcebergCompactionTable
+    strategy: Literal["binpack"]
+    target_file_size_bytes: int = Field(gt=0)
+    min_input_files: int = Field(gt=1)
 
 
 def _load_yaml(path: Path) -> dict[str, object]:
@@ -97,3 +118,8 @@ def load_dp1_config(path: Path) -> Dp1Config:
 def load_dp2_config(path: Path) -> Dp2Config:
     """Load and validate a DP2 configuration file."""
     return Dp2Config.model_validate(_load_yaml(path))
+
+
+def load_iceberg_compaction_config(path: Path) -> IcebergCompactionConfig:
+    """Load and validate an Iceberg compaction configuration file."""
+    return IcebergCompactionConfig.model_validate(_load_yaml(path))

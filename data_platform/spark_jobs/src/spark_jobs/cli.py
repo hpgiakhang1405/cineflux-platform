@@ -13,7 +13,12 @@ import logging
 import sys
 from pathlib import Path
 
-from spark_jobs.config import load_dp1_config, load_dp2_config
+from spark_jobs.compact_iceberg import IcebergCompactionJob
+from spark_jobs.config import (
+    load_dp1_config,
+    load_dp2_config,
+    load_iceberg_compaction_config,
+)
 from spark_jobs.dp1_ingest_raw import Dp1IngestRawJob
 from spark_jobs.dp2_bronze_to_silver import Dp2BronzeToSilverJob
 from spark_jobs.settings import RuntimeSettings
@@ -24,7 +29,7 @@ def _parser() -> argparse.ArgumentParser:
     """Build the Spark jobs command-line parser."""
     parser = argparse.ArgumentParser(prog="cineflux-spark-jobs")
     commands = parser.add_subparsers(dest="command", required=True)
-    for command in ("dp1", "dp2"):
+    for command in ("dp1", "dp2", "compact"):
         subparser = commands.add_parser(command)
         subparser.add_argument("--config", type=Path, required=True)
         subparser.add_argument("--run-id", required=True)
@@ -42,14 +47,18 @@ def main() -> None:
     settings = RuntimeSettings.from_environment()
     if arguments.command == "dp1":
         config = load_dp1_config(arguments.config)
-    else:
+    elif arguments.command == "dp2":
         config = load_dp2_config(arguments.config)
+    else:
+        config = load_iceberg_compaction_config(arguments.config)
     spark = create_spark_session(config.job_name, settings, config.spark)
     try:
         if arguments.command == "dp1":
             job = Dp1IngestRawJob(spark, arguments.run_id, config, settings)
-        else:
+        elif arguments.command == "dp2":
             job = Dp2BronzeToSilverJob(spark, arguments.run_id, config, settings)
+        else:
+            job = IcebergCompactionJob(spark, arguments.run_id, config, settings)
         print(json.dumps(job.run(), indent=2, sort_keys=True), flush=True)
     finally:
         spark.stop()

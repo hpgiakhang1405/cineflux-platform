@@ -1,0 +1,14 @@
+job_name: cineflux-storage-small-file-ingestion
+spark:
+  shuffle_partitions: 8
+  adaptive_enabled: false
+  broadcast_threshold_bytes: -1
+landing:
+  scenario: demo
+  bootstrap_prefix: bootstrap/initial_historical_playback_events
+  recurring_prefix: recurring
+bronze:
+  namespace: bronze
+schema_strategy: explicit
+source_system: cineflux_generator
+playback_write_batches: 4

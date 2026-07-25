@@ -154,6 +154,12 @@ class Dp1IngestRawJob(SparkJob):
                 f"bronze.write.{table}",
                 f"Append {dataset} to Bronze {table}",
             ):
+                if (
+                    dataset == "playback_events"
+                    and self._config.playback_write_batches > 1
+                ):
+                    self._append_playback_batches(namespace, table, frame)
+                    continue
                 self._iceberg.append(
                     namespace,
                     table,
@@ -264,3 +270,26 @@ class Dp1IngestRawJob(SparkJob):
             "content": tables.content,
             "playback_events": tables.playback_events,
         }
+
+    def _append_playback_batches(
+        self,
+        namespace: str,
+        table: str,
+        frame: DataFrame,
+    ) -> None:
+        """Write deterministic source batches that expose the small-file problem."""
+        batch_count = self._config.playback_write_batches
+        bucketed = frame.withColumn(
+            "_write_batch",
+            F.pmod(F.xxhash64("event_id"), F.lit(batch_count)),
+        )
+        for batch_number in range(batch_count):
+            batch = bucketed.filter(
+                F.col("_write_batch") == F.lit(batch_number)
+            ).drop("_write_batch")
+            self._iceberg.append(
+                namespace,
+                table,
+                batch,
+                "event_timestamp",
+            )

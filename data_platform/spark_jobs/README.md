@@ -7,6 +7,7 @@ from Bronze to Silver.
 |---|---|---|
 | `dp1` | Generator Parquet files in the MinIO landing bucket | Four append-only Iceberg `raw_*` tables |
 | `dp2` | Four Iceberg Bronze tables | Four `stg_*` tables and `int_playback_sessions` |
+| `compact` | Small Iceberg files in `bronze.raw_playback_events` | Bin-packed files with unchanged logical rows |
 
 Runtime endpoints and credentials are read from environment variables. Job behavior and
 benchmark strategies are selected through versioned YAML files in `config/`.
@@ -21,7 +22,14 @@ make spark-build
 make spark-up
 make spark-dp1 SPARK_CONFIG=spark_dp1_smoke PIPELINE_RUN_ID=smoke_dp1_001
 make spark-dp2 SPARK_CONFIG=spark_dp2_smoke PIPELINE_RUN_ID=smoke_dp2_001
+make storage-prepare PIPELINE_RUN_ID=storage_ingestion_001
+make storage-compact PIPELINE_RUN_ID=storage_compaction_001
 ```
+
+The storage ingestion configuration writes playback events in deterministic source batches
+inside each daily partition. The compaction command later rewrites those files without
+changing the row count or event keys. `storage-prepare` replaces the four Bronze tables and
+must only be used when resetting the storage benchmark baseline.
 
 Use the named baseline and optimized files in `config/` for reproducible performance runs.
 Each command prints a JSON summary containing its application ID, duration, effective
