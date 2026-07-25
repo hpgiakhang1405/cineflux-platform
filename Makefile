@@ -3,7 +3,7 @@ SHELL := /bin/bash
 -include .env
 
 COMPOSE := docker compose
-PROFILES := messaging storage processing spark-processing flink-processing orchestration analytics governance generator-batch generator-stream
+PROFILES := messaging storage processing spark-processing flink-processing dbt-processing orchestration analytics governance generator-batch generator-stream
 GENERATOR_CONFIG ?= smoke
 SPARK_CONFIG ?=
 FLINK_CONFIG ?=
@@ -14,7 +14,8 @@ FLINK_JOB_ID ?=
 .PHONY: help env check-local-env check-profile check-service check-delivery check-execution-id check-pipeline-run-id check-spark-config check-flink-config check-flink-job-id config up ps logs stop \
 	generator-build generator-build-baseline generator-bootstrap generator-batch \
 	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2 \
-	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data
+	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data \
+	dbt-build dbt-up dbt-debug dbt-smoke dbt-migrate dbt-run dbt-test dbt-docs dbt-docs-serve
 
 help:
 	@printf '%s\n' \
@@ -42,6 +43,15 @@ help:
 		'  make flink-submit FLINK_CONFIG=flink_smoke' \
 		'  make flink-cancel FLINK_JOB_ID=<job-id>' \
 		'  make flink-reset-data FLINK_CONFIG=flink_smoke' \
+		'  make dbt-build' \
+		'  make dbt-up' \
+		'  make dbt-debug' \
+		'  make dbt-smoke' \
+		'  make dbt-migrate' \
+		'  make dbt-run' \
+		'  make dbt-test' \
+		'  make dbt-docs' \
+		'  make dbt-docs-serve' \
 		'' \
 		'Profiles: $(PROFILES)'
 
@@ -246,3 +256,37 @@ flink-reset-data: check-flink-config
 		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
 		--set=ON_ERROR_STOP=1 \
 		--command "TRUNCATE $(POSTGRES_STREAMING_SCHEMA).playback_metrics_5m, $(POSTGRES_STREAMING_SCHEMA).content_popularity_5m;"
+
+dbt-build:
+	@$(COMPOSE) --profile dbt-processing build dbt-jobs
+
+dbt-up:
+	@$(COMPOSE) --profile dbt-processing up -d \
+		postgres minio minio-init hive-metastore trino
+
+dbt-debug:
+	@$(COMPOSE) --profile dbt-processing run --rm dbt-jobs debug
+
+dbt-smoke:
+	@$(COMPOSE) --profile dbt-processing run --rm dbt-jobs run-operation \
+		iceberg_write_smoke
+
+dbt-migrate:
+	@$(COMPOSE) --profile dbt-processing exec -T postgres \
+		psql --username "$(POSTGRES_USER)" --dbname "$(CINEFLUX_POSTGRES_DB)" \
+		--set=serving_schema="$(POSTGRES_SERVING_SCHEMA)" \
+		--set=ON_ERROR_STOP=1 \
+		--file=/platform-migrations/002_serving_tables.sql
+
+dbt-run: dbt-migrate
+	@$(COMPOSE) --profile dbt-processing run --rm dbt-jobs run
+
+dbt-test:
+	@$(COMPOSE) --profile dbt-processing run --rm dbt-jobs test
+
+dbt-docs:
+	@$(COMPOSE) --profile dbt-processing run --rm dbt-jobs docs generate
+
+dbt-docs-serve:
+	@$(COMPOSE) --profile dbt-processing run --rm --service-ports dbt-jobs \
+		docs serve --host 0.0.0.0 --port 8080

@@ -1,0 +1,16 @@
+[project]
+name = "cineflux-dbt-jobs"
+version = "0.1.0"
+description = "dbt-trino analytics models for CineFlux Gold and Feature layers."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-core==1.10.22",
+    "dbt-trino==1.10.3",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = []

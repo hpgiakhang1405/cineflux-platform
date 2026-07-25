@@ -80,6 +80,16 @@ x-spark-image: &spark-image
       HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
       AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
 
+x-dbt-image: &dbt-image
+  image: ${DBT_JOBS_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/dbt/Dockerfile
+    args:
+      DBT_PYTHON_RUNTIME_IMAGE: ${DBT_PYTHON_RUNTIME_IMAGE}
+      UV_IMAGE: ${UV_IMAGE}
+
 x-flink-image: &flink-image
   image: ${FLINK_JOBS_IMAGE}
   pull_policy: never
@@ -102,7 +112,7 @@ x-flink-image: &flink-image
 services:
   postgres:
     image: ${POSTGRES_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, orchestration, analytics, governance]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, governance]
     restart: unless-stopped
     environment: *postgres-environment
     ports:
@@ -121,7 +131,7 @@ services:
 
   minio:
     image: ${MINIO_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, analytics, generator-batch]
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -143,7 +153,7 @@ services:
 
   minio-init:
     image: ${MINIO_MC_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, analytics, generator-batch]
     restart: "no"
     depends_on:
       minio:
@@ -267,7 +277,7 @@ services:
 
   hive-metastore:
     image: ${HIVE_METASTORE_IMAGE}
-    profiles: [storage, processing, spark-processing, analytics]
+    profiles: [storage, processing, spark-processing, dbt-processing, analytics]
     pull_policy: build
     build:
       context: .
@@ -305,7 +315,7 @@ services:
 
   trino:
     image: ${TRINO_IMAGE}
-    profiles: [storage, processing, spark-processing, analytics]
+    profiles: [storage, processing, spark-processing, dbt-processing, analytics]
     restart: unless-stopped
     depends_on:
       hive-metastore:
@@ -462,6 +472,34 @@ services:
     volumes:
       - spark-events:/opt/spark/events
       - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    networks: [cineflux-network]
+
+  dbt-jobs:
+    <<: *dbt-image
+    profiles: [dbt-processing]
+    restart: "no"
+    depends_on:
+      trino:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      DBT_TARGET: ${DBT_TARGET}
+      DBT_TRINO_HOST: ${DBT_TRINO_HOST}
+      DBT_TRINO_PORT: ${DBT_TRINO_PORT}
+      DBT_TRINO_USER: ${DBT_TRINO_USER}
+      DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+      DBT_THREADS: ${DBT_THREADS}
+      DBT_ICEBERG_CATALOG: ${DBT_ICEBERG_CATALOG}
+      DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
+      DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
+      DBT_GOLD_SCHEMA: ${DBT_GOLD_SCHEMA}
+      DBT_FEATURE_SCHEMA: ${DBT_FEATURE_SCHEMA}
+      POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+    ports:
+      - "${DBT_DOCS_PORT}:8080"
+    volumes:
+      - ./artifacts/dbt:/app/target
     networks: [cineflux-network]
 
   flink-jobmanager:

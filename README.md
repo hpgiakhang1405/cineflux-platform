@@ -45,6 +45,8 @@ Phase 1 focuses on the data-platform foundation:
   append-only Bronze tables and rebuild validated Silver tables.
 - [Flink Streaming Jobs](data_platform/flink_jobs/README.md) validate Kafka playback events,
   handle late and duplicate records, and upsert five-minute metrics into PostgreSQL.
+- [dbt Analytics Models](data_platform/dbt/README.md) build deterministic Gold dimensions,
+  analytical marts, offline features, and the PostgreSQL serving copy.
 
 ## Documentation
 

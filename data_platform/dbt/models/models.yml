@@ -1,0 +1,208 @@
+version: 2
+
+models:
+  - name: stg_silver_users
+    description: Typed user profile versions selected from the Silver source.
+
+  - name: stg_silver_subscriptions
+    description: Typed subscription versions selected from the Silver source.
+
+  - name: stg_silver_content
+    description: Typed content metadata versions selected from the Silver source.
+
+  - name: stg_silver_playback_sessions
+    description: Historical playback sessions selected from the normalized Silver source.
+
+  - name: int_user_timeline
+    description: Combined user and subscription change timeline resolved at each effective timestamp.
+
+  - name: int_dim_user_history
+    description: Consecutive duplicate user states removed before SCD2 interval construction.
+
+  - name: int_dim_content_history
+    description: Consecutive duplicate content states removed before SCD2 interval construction.
+
+  - name: dim_user
+    description: Deterministic full-rebuild SCD2 history for user profiles and subscriptions.
+    data_tests:
+      - cineflux_scd2_one_current:
+          arguments:
+            natural_key: user_id
+      - cineflux_scd2_valid_ranges
+      - cineflux_scd2_contiguous:
+          arguments:
+            natural_key: user_id
+      - cineflux_scd2_changes_only:
+          arguments:
+            natural_key: user_id
+      - cineflux_gold_forbids_created
+    columns:
+      - name: user_sk
+        description: SHA-256 hash of user_id and valid_from_ts.
+        data_tests: [not_null, unique]
+      - name: user_id
+        description: Natural user identifier.
+        data_tests: [not_null]
+      - name: record_hash
+        description: Deterministic hash of tracked SCD2 attributes.
+        data_tests: [not_null]
+
+  - name: dim_content
+    description: Deterministic full-rebuild SCD2 history for content metadata.
+    data_tests:
+      - cineflux_scd2_one_current:
+          arguments:
+            natural_key: content_id
+      - cineflux_scd2_valid_ranges
+      - cineflux_scd2_contiguous:
+          arguments:
+            natural_key: content_id
+      - cineflux_scd2_changes_only:
+          arguments:
+            natural_key: content_id
+      - cineflux_gold_forbids_created
+    columns:
+      - name: content_sk
+        description: SHA-256 hash of content_id and valid_from_ts.
+        data_tests: [not_null, unique]
+      - name: content_id
+        description: Natural content identifier.
+        data_tests: [not_null]
+      - name: record_hash
+        description: Deterministic hash of tracked SCD2 attributes.
+        data_tests: [not_null]
+
+  - name: fact_playback_session
+    description: Historical playback sessions resolved to time-valid user and content dimensions.
+    data_tests:
+      - cineflux_gold_forbids_created
+    columns:
+      - name: session_id
+        description: Playback session business key.
+        data_tests: [not_null, unique]
+      - name: user_sk
+        description: Time-valid user dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_user')
+                field: user_sk
+      - name: content_sk
+        description: Time-valid content dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_content')
+                field: content_sk
+
+  - name: obt_user_content_engagement
+    description: Daily user-content engagement rollup used by analytics and offline features.
+    data_tests:
+      - cineflux_unique_combination:
+          arguments:
+            columns: [user_id, content_id, activity_date]
+      - cineflux_gold_forbids_created
+    columns:
+      - name: user_id
+        data_tests: [not_null]
+      - name: content_id
+        data_tests: [not_null]
+      - name: activity_date
+        data_tests: [not_null]
+      - name: days_since_last_playback
+        data_tests:
+          - cineflux_nonnegative
+
+  - name: mart_content_trending
+    description: Hourly content engagement ranking with a deterministic popularity score.
+    data_tests:
+      - cineflux_unique_combination:
+          arguments:
+            columns: [window_start, content_id]
+      - cineflux_gold_forbids_created
+    columns:
+      - name: window_start
+        data_tests: [not_null]
+      - name: content_id
+        data_tests: [not_null]
+      - name: popularity_rank
+        data_tests: [not_null]
+
+  - name: feat_user_engagement
+    description: Daily point-in-time user engagement features with 24-hour, 7-day, and 30-day windows.
+    data_tests:
+      - cineflux_unique_combination:
+          arguments:
+            columns: [user_id, event_timestamp]
+      - cineflux_feature_timestamp_columns
+      - cineflux_created_not_before_event
+    columns:
+      - name: user_id
+        data_tests: [not_null]
+      - name: watch_minutes_24h
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: watch_minutes_7d
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: playback_sessions_7d
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: completed_sessions_30d
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: average_completion_rate_30d
+        data_tests:
+          - not_null
+          - cineflux_between:
+              arguments:
+                minimum: 0
+                maximum: 1
+      - name: distinct_content_count_30d
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: days_since_last_playback
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: event_timestamp
+        data_tests: [not_null]
+      - name: created
+        data_tests: [not_null]
+
+  - name: feat_content_popularity
+    description: Hourly point-in-time content popularity features with exact 24-hour distinct viewers.
+    data_tests:
+      - cineflux_unique_combination:
+          arguments:
+            columns: [content_id, event_timestamp]
+      - cineflux_feature_timestamp_columns
+      - cineflux_created_not_before_event
+    columns:
+      - name: content_id
+        data_tests: [not_null]
+      - name: playback_count_1h
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: playback_count_24h
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: unique_viewer_count_24h
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: completion_rate_7d
+        data_tests:
+          - not_null
+          - cineflux_between:
+              arguments:
+                minimum: 0
+                maximum: 1
+      - name: popularity_score_24h
+        data_tests: [not_null, cineflux_nonnegative]
+      - name: event_timestamp
+        data_tests: [not_null]
+      - name: created
+        data_tests: [not_null]
+
+  - name: publish_mart_content_trending
+    description: PostgreSQL serving copy of the hourly Iceberg content trending mart.
+    config:
+      contract:
+        enforced: false
+    columns:
+      - name: window_start
+        data_tests: [not_null]
+      - name: content_id
+        data_tests: [not_null]

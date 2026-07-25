@@ -1,0 +1,29 @@
+name: cineflux_analytics
+version: 0.1.0
+config-version: 2
+
+profile: cineflux
+
+model-paths: [models]
+macro-paths: [macros]
+test-paths: [tests]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+models:
+  cineflux_analytics:
+    staging:
+      +materialized: ephemeral
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      gold:
+        +materialized: table
+        +schema: "{{ env_var('DBT_GOLD_SCHEMA') }}"
+      feature:
+        +materialized: table
+        +schema: "{{ env_var('DBT_FEATURE_SCHEMA') }}"
+      serving:
+        +database: "{{ env_var('DBT_POSTGRES_CATALOG') }}"
+        +schema: "{{ env_var('POSTGRES_SERVING_SCHEMA') }}"
+        +materialized: incremental
