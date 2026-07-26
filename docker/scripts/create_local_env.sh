@@ -38,5 +38,9 @@ replace_value DATAHUB_TOKEN_SERVICE_SALT "$(random_hex 16)"
 replace_value DATAHUB_SYSTEM_CLIENT_SECRET "$(random_hex 32)"
 replace_value DATAHUB_FRONTEND_SECRET "$(random_hex 32)"
 
+if [[ -S /var/run/docker.sock ]]; then
+    replace_value DOCKER_GID "$(stat -c '%g' /var/run/docker.sock)"
+fi
+
 chmod 600 "${environment_path}"
 echo "Created ${environment_path} with local-only credentials."

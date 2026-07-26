@@ -99,6 +99,24 @@ class IcebergCompactionConfig(StrictConfig):
     strategy: Literal["binpack"]
     target_file_size_bytes: int = Field(gt=0)
     min_input_files: int = Field(gt=1)
+    require_file_reduction: bool = True
+
+
+class IcebergSnapshotExpirationTable(StrictConfig):
+    """Identify one Iceberg table whose old snapshots can be expired."""
+
+    namespace: str = Field(pattern=r"^[a-z0-9_]+$")
+    name: str = Field(pattern=r"^[a-z0-9_]+$")
+
+
+class IcebergSnapshotExpirationConfig(StrictConfig):
+    """Configure safe snapshot expiration for one Iceberg table."""
+
+    job_name: str
+    spark: SparkTuning
+    table: IcebergSnapshotExpirationTable
+    retention_hours: int = Field(gt=0)
+    retain_last: int = Field(gt=0)
 
 
 def _load_yaml(path: Path) -> dict[str, object]:
@@ -123,3 +141,10 @@ def load_dp2_config(path: Path) -> Dp2Config:
 def load_iceberg_compaction_config(path: Path) -> IcebergCompactionConfig:
     """Load and validate an Iceberg compaction configuration file."""
     return IcebergCompactionConfig.model_validate(_load_yaml(path))
+
+
+def load_iceberg_snapshot_expiration_config(
+    path: Path,
+) -> IcebergSnapshotExpirationConfig:
+    """Load and validate an Iceberg snapshot-expiration configuration file."""
+    return IcebergSnapshotExpirationConfig.model_validate(_load_yaml(path))

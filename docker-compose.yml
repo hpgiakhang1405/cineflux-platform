@@ -14,6 +14,15 @@ x-postgres-environment: &postgres-environment
 
 x-airflow-common: &airflow-common
   image: ${AIRFLOW_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/airflow/Dockerfile
+    args:
+      AIRFLOW_BASE_IMAGE: ${AIRFLOW_BASE_IMAGE}
+      SPARK_JOBS_IMAGE: ${SPARK_JOBS_IMAGE}
+      AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+      AIRFLOW_PYTHON_VERSION: ${AIRFLOW_PYTHON_VERSION}
   profiles: [orchestration]
   restart: unless-stopped
   environment:
@@ -131,7 +140,7 @@ services:
 
   minio:
     image: ${MINIO_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, generator-batch]
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -153,7 +162,7 @@ services:
 
   minio-init:
     image: ${MINIO_MC_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, generator-batch]
     restart: "no"
     depends_on:
       minio:
@@ -277,7 +286,7 @@ services:
 
   hive-metastore:
     image: ${HIVE_METASTORE_IMAGE}
-    profiles: [storage, processing, spark-processing, dbt-processing, analytics]
+    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics]
     pull_policy: build
     build:
       context: .
@@ -315,7 +324,7 @@ services:
 
   trino:
     image: ${TRINO_IMAGE}
-    profiles: [storage, processing, spark-processing, dbt-processing, analytics]
+    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics]
     restart: unless-stopped
     depends_on:
       hive-metastore:
@@ -346,7 +355,7 @@ services:
 
   spark-events-init:
     image: ${ALPINE_IMAGE}
-    profiles: [processing, spark-processing]
+    profiles: [processing, spark-processing, orchestration]
     restart: "no"
     command: [/bin/sh, -c, "chmod 0777 /opt/spark/events"]
     volumes:
@@ -355,7 +364,7 @@ services:
 
   spark-master:
     <<: *spark-image
-    profiles: [processing, spark-processing]
+    profiles: [processing, spark-processing, orchestration]
     restart: unless-stopped
     depends_on:
       spark-events-init:
@@ -383,7 +392,7 @@ services:
 
   spark-worker:
     <<: *spark-image
-    profiles: [processing, spark-processing]
+    profiles: [processing, spark-processing, orchestration]
     restart: unless-stopped
     depends_on:
       spark-master:
@@ -409,7 +418,7 @@ services:
 
   spark-history-server:
     <<: *spark-image
-    profiles: [processing, spark-processing]
+    profiles: [processing, spark-processing, orchestration]
     restart: unless-stopped
     depends_on:
       spark-events-init:
@@ -594,20 +603,59 @@ services:
       AIRFLOW_ADMIN_FIRSTNAME: ${AIRFLOW_ADMIN_FIRSTNAME}
       AIRFLOW_ADMIN_LASTNAME: ${AIRFLOW_ADMIN_LASTNAME}
       AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL}
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db migrate
-        if ! airflow users list | grep -q "$${AIRFLOW_ADMIN_USERNAME}"; then
-          airflow users create \
-            --username "$${AIRFLOW_ADMIN_USERNAME}" \
-            --password "$${AIRFLOW_ADMIN_PASSWORD}" \
-            --firstname "$${AIRFLOW_ADMIN_FIRSTNAME}" \
-            --lastname "$${AIRFLOW_ADMIN_LASTNAME}" \
-            --role Admin \
-            --email "$${AIRFLOW_ADMIN_EMAIL}"
-        fi
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+      POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_LANDING_BUCKET: ${MINIO_LANDING_BUCKET}
+      MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY}
+      CUTOVER_TIMESTAMP: ${CUTOVER_TIMESTAMP}
+      ICEBERG_CATALOG_NAME: ${ICEBERG_CATALOG_NAME}
+      DBT_JOBS_IMAGE: ${DBT_JOBS_IMAGE}
+      DBT_TARGET: ${DBT_TARGET}
+      DBT_TRINO_HOST: ${DBT_TRINO_HOST}
+      DBT_TRINO_PORT: ${DBT_TRINO_PORT}
+      DBT_TRINO_USER: ${DBT_TRINO_USER}
+      DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+      DBT_THREADS: ${DBT_THREADS}
+      DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
+      DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
+      DBT_GOLD_SCHEMA: ${DBT_GOLD_SCHEMA}
+      DBT_FEATURE_SCHEMA: ${DBT_FEATURE_SCHEMA}
+      AIRFLOW_BRONZE_SCHEMA: ${AIRFLOW_BRONZE_SCHEMA}
+      AIRFLOW_LANDING_SCENARIO: ${AIRFLOW_LANDING_SCENARIO}
+      AIRFLOW_LANDING_BOOTSTRAP_PREFIX: ${AIRFLOW_LANDING_BOOTSTRAP_PREFIX}
+      AIRFLOW_LANDING_RECURRING_PREFIX: ${AIRFLOW_LANDING_RECURRING_PREFIX}
+      AIRFLOW_SPARK_APPLICATION_PATH: ${AIRFLOW_SPARK_APPLICATION_PATH}
+      AIRFLOW_SPARK_PY_FILES_PATH: ${AIRFLOW_SPARK_PY_FILES_PATH}
+      AIRFLOW_SPARK_DP1_CONFIG_PATH: ${AIRFLOW_SPARK_DP1_CONFIG_PATH}
+      AIRFLOW_SPARK_DP2_CONFIG_PATH: ${AIRFLOW_SPARK_DP2_CONFIG_PATH}
+      AIRFLOW_SPARK_COMPACTION_CONFIG_PATH: ${AIRFLOW_SPARK_COMPACTION_CONFIG_PATH}
+      AIRFLOW_SPARK_SNAPSHOT_EXPIRATION_CONFIG_PATH: ${AIRFLOW_SPARK_SNAPSHOT_EXPIRATION_CONFIG_PATH}
+      AIRFLOW_SPARK_JARS: ${AIRFLOW_SPARK_JARS}
+      AIRFLOW_SPARK_DRIVER_HOST: ${AIRFLOW_SPARK_DRIVER_HOST}
+      AIRFLOW_SPARK_DRIVER_PYTHON: ${AIRFLOW_SPARK_DRIVER_PYTHON}
+      AIRFLOW_SPARK_EXECUTOR_PYTHON: ${AIRFLOW_SPARK_EXECUTOR_PYTHON}
+      AIRFLOW_SPARK_EVENT_LOG_DIR: ${AIRFLOW_SPARK_EVENT_LOG_DIR}
+      AIRFLOW_DBT_PROJECT_DIR: ${AIRFLOW_DBT_PROJECT_DIR}
+      AIRFLOW_DBT_PROFILES_DIR: ${AIRFLOW_DBT_PROFILES_DIR}
+      AIRFLOW_DBT_DP2_SELECTOR: ${AIRFLOW_DBT_DP2_SELECTOR}
+      AIRFLOW_DBT_DP3_SELECTOR: ${AIRFLOW_DBT_DP3_SELECTOR}
+      DOCKER_ENGINE_URL: ${DOCKER_ENGINE_URL}
+      DOCKER_NETWORK_NAME: ${DOCKER_NETWORK_NAME}
+      AIRFLOW_PIPELINE_RETRIES: ${AIRFLOW_PIPELINE_RETRIES}
+      AIRFLOW_PIPELINE_RETRY_DELAY_MINUTES: ${AIRFLOW_PIPELINE_RETRY_DELAY_MINUTES}
+      AIRFLOW_ICEBERG_MAINTENANCE_SCHEDULE: ${AIRFLOW_ICEBERG_MAINTENANCE_SCHEDULE}
+    entrypoint: /opt/airflow/scripts/bootstrap_airflow.sh
+    command: []
 
   airflow-webserver:
     <<: *airflow-common
@@ -627,9 +675,21 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    group_add:
+      - "${DOCKER_GID}"
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      trino:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - airflow-logs:/opt/airflow/logs
+      - spark-events:/opt/spark/events
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: [CMD-SHELL, "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
       interval: 15s

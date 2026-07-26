@@ -2,7 +2,7 @@
 
 Reads: four append-only Bronze Iceberg tables.
 Writes: four `stg_*` tables and `int_playback_sessions` in Iceberg Silver.
-Runs: the `dp2` Spark CLI command and the future Bronze-to-Silver Airflow task.
+Runs: the `dp2` Spark CLI command and the Airflow Bronze-to-Silver task.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 Reads: generator bootstrap and recurring Parquet objects in MinIO.
 Writes: four `raw_*` Iceberg tables with shared technical metadata.
-Runs: the `dp1` Spark CLI command and the future raw-to-Bronze Airflow task.
+Runs: the `dp1` Spark CLI command and the Airflow raw-to-Bronze task.
 """
 
 from __future__ import annotations
@@ -132,21 +132,36 @@ class Dp1IngestRawJob(SparkJob):
         tables = self._table_mapping()
         self._iceberg.ensure_namespace(namespace)
 
-        for table in tables.values():
+        existing_counts: dict[str, int] = {}
+        for dataset, table in tables.items():
             if not self._iceberg.exists(namespace, table):
+                existing_counts[dataset] = 0
                 continue
             with self.spark_action(
                 f"bronze.idempotency.{table}",
                 f"Check Bronze {table} idempotency",
             ):
-                existing = (
+                existing_counts[dataset] = (
                     self._iceberg.read(namespace, table)
                     .filter(F.col("_pipeline_run_id") == self.run_id)
-                    .limit(1)
                     .count()
                 )
-            if existing:
-                raise ValueError(f"Pipeline run already exists in {namespace}.{table}: {self.run_id}")
+
+        if existing_counts == self._input_counts:
+            self.metrics["idempotent_reuse"] = True
+            LOGGER.info(
+                "bronze_run_reused run_id=%s namespace=%s",
+                self.run_id,
+                namespace,
+            )
+            return
+        if any(existing_counts.values()):
+            raise ValueError(
+                f"Pipeline run has partial Bronze output in {namespace}: "
+                f"run_id={self.run_id} counts={existing_counts}"
+            )
+
+        self.metrics["idempotent_reuse"] = False
 
         for dataset, frame in outputs.items():
             table = tables[dataset]

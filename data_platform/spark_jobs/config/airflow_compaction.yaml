@@ -1,0 +1,14 @@
+job_name: cineflux-airflow-raw-playback-events-compaction
+spark:
+  shuffle_partitions: 16
+  adaptive_enabled: false
+  broadcast_threshold_bytes: -1
+table:
+  namespace: bronze
+  name: raw_playback_events
+  business_key: event_id
+  event_timestamp_column: event_timestamp
+strategy: binpack
+target_file_size_bytes: 134217728
+min_input_files: 2
+require_file_reduction: false

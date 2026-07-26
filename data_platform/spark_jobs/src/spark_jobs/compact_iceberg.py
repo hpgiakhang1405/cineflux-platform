@@ -113,7 +113,10 @@ class IcebergCompactionJob(SparkJob):
         if after_data != self._before_data:
             raise ValueError("Compaction changed the logical table metrics")
         before_file_count = self.metrics["before"]["files"]["file_count"]
-        if after_files["file_count"] >= before_file_count:
+        if (
+            self._config.require_file_reduction
+            and after_files["file_count"] >= before_file_count
+        ):
             raise ValueError(
                 "Compaction did not reduce the number of current data files"
             )

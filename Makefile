@@ -11,10 +11,11 @@ FLINK_JOB_ID ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help env check-local-env check-profile check-service check-delivery check-execution-id check-pipeline-run-id check-spark-config check-flink-config check-flink-job-id config up ps logs stop \
+.PHONY: help env check-local-env check-profile check-service check-delivery check-execution-id check-pipeline-run-id check-spark-config check-flink-config check-flink-job-id check-dag-id config up ps logs stop \
 	generator-build generator-build-baseline generator-bootstrap generator-batch \
 	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2 \
 	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data \
+	airflow-build airflow-build-baseline airflow-up airflow-import-check airflow-connections airflow-variables airflow-trigger \
 	docker-image-benchmark \
 	dbt-build dbt-up dbt-debug dbt-smoke dbt-migrate dbt-run dbt-test dbt-docs dbt-docs-serve \
 	storage-prepare storage-lakehouse-files storage-lakehouse-benchmark storage-compact \
@@ -47,6 +48,13 @@ help:
 		'  make flink-submit FLINK_CONFIG=flink_smoke' \
 		'  make flink-cancel FLINK_JOB_ID=<job-id>' \
 		'  make flink-reset-data FLINK_CONFIG=flink_smoke' \
+		'  make airflow-build' \
+		'  make airflow-build-baseline' \
+		'  make airflow-up' \
+		'  make airflow-import-check' \
+		'  make airflow-connections' \
+		'  make airflow-variables' \
+		'  make airflow-trigger DAG_ID=dp1_raw_to_bronze' \
 		'  make dbt-build' \
 		'  make dbt-up' \
 		'  make dbt-debug' \
@@ -132,6 +140,12 @@ check-flink-config:
 check-flink-job-id:
 	@if [[ -z "$(FLINK_JOB_ID)" ]]; then \
 		echo 'FLINK_JOB_ID is required. Run make help for usage.' >&2; \
+		exit 1; \
+	fi
+
+check-dag-id:
+	@if [[ -z "$(DAG_ID)" ]]; then \
+		echo 'DAG_ID is required. Run make help for usage.' >&2; \
 		exit 1; \
 	fi
 
@@ -259,7 +273,39 @@ docker-image-benchmark: check-local-env
 	printf '%-16s %14s %14s %12s\n' 'Component' 'Baseline MiB' 'Optimized MiB' 'Reduction'; \
 	measure 'Data Generator' '$(DATA_GENERATOR_BASELINE_IMAGE)' '$(DATA_GENERATOR_IMAGE)'; \
 	measure 'Spark Jobs' '$(SPARK_JOBS_BASELINE_IMAGE)' '$(SPARK_JOBS_IMAGE)'; \
-	measure 'Flink Jobs' '$(FLINK_JOBS_BASELINE_IMAGE)' '$(FLINK_JOBS_IMAGE)'
+	measure 'Flink Jobs' '$(FLINK_JOBS_BASELINE_IMAGE)' '$(FLINK_JOBS_IMAGE)'; \
+	measure 'Airflow' '$(AIRFLOW_BASELINE_IMAGE)' '$(AIRFLOW_IMAGE)'
+
+airflow-build:
+	@$(COMPOSE) --profile orchestration build airflow-webserver
+
+airflow-build-baseline: check-local-env
+	@docker build \
+		--build-arg AIRFLOW_BASE_IMAGE="$(AIRFLOW_BASE_IMAGE)" \
+		--build-arg SPARK_JOBS_IMAGE="$(SPARK_JOBS_IMAGE)" \
+		--build-arg AIRFLOW_VERSION="$(AIRFLOW_VERSION)" \
+		--build-arg AIRFLOW_PYTHON_VERSION="$(AIRFLOW_PYTHON_VERSION)" \
+		-f data_platform/airflow/Dockerfile.baseline \
+		-t "$(AIRFLOW_BASELINE_IMAGE)" .
+
+airflow-up:
+	@$(COMPOSE) --profile orchestration up -d
+
+airflow-import-check:
+	@$(COMPOSE) --profile orchestration exec -T airflow-scheduler \
+		airflow dags list-import-errors
+
+airflow-connections:
+	@$(COMPOSE) --profile orchestration exec -T airflow-scheduler \
+		python /opt/airflow/scripts/list_connections.py
+
+airflow-variables:
+	@$(COMPOSE) --profile orchestration exec -T airflow-scheduler \
+		airflow variables list --output table
+
+airflow-trigger: check-dag-id
+	@$(COMPOSE) --profile orchestration exec -T airflow-scheduler \
+		airflow dags trigger "$(DAG_ID)"
 
 flink-up:
 	@$(COMPOSE) --profile flink-processing up -d \

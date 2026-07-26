@@ -16,14 +16,18 @@ models:
       +materialized: ephemeral
     intermediate:
       +materialized: ephemeral
+      +tags: [dp2]
     marts:
       gold:
         +materialized: table
         +schema: "{{ env_var('DBT_GOLD_SCHEMA') }}"
+        +tags: [dp2]
       feature:
         +materialized: table
         +schema: "{{ env_var('DBT_FEATURE_SCHEMA') }}"
+        +tags: [dp3]
       serving:
         +database: "{{ env_var('DBT_POSTGRES_CATALOG') }}"
         +schema: "{{ env_var('POSTGRES_SERVING_SCHEMA') }}"
         +materialized: incremental
+        +tags: [dp2]

@@ -47,6 +47,8 @@ Phase 1 focuses on the data-platform foundation:
   handle late and duplicate records, and upsert five-minute metrics into PostgreSQL.
 - [dbt Analytics Models](data_platform/dbt/README.md) build deterministic Gold dimensions,
   analytical marts, offline features, and the PostgreSQL serving copy.
+- [Airflow Orchestration](docs/Orchestration.md) coordinates the batch pipelines and
+  Iceberg maintenance with explicit ingest and validation stages.
 
 ## Documentation
 

@@ -63,6 +63,20 @@ class SparkJob(ABC):
         self.write(outputs)
         self.validate_output(outputs)
         self.publish_lineage()
+        return self._summary(started)
+
+    def validate(self) -> dict[str, Any]:
+        """Run source and persisted-output checks without writing data."""
+        started = perf_counter()
+        LOGGER.info("spark_validation_started job=%s run_id=%s", self.job_name, self.run_id)
+        inputs = self.read()
+        self.validate_input(inputs)
+        self.validate_output({})
+        self.publish_lineage()
+        return self._summary(started)
+
+    def _summary(self, started: float) -> dict[str, Any]:
+        """Build the common structured execution summary."""
         duration = perf_counter() - started
         finished_at = datetime.now(timezone.utc)
         summary = {

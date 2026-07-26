@@ -196,6 +196,17 @@ docker compose exec -T trino trino --execute \
    FROM iceberg.silver.stg_users"
 ```
 
+## Airflow Integration
+
+Airflow submits DP1 and DP2 through `SparkSubmitOperator`; Spark transformation and
+validation logic remains in the Spark component. DP2 then runs the Gold and serving models
+through a separate dbt `DockerOperator` before the validation stage.
+
+![Spark processing integrated into Airflow](assets/orchestration/dp2_graph.png)
+
+The completed workflow shows `bronze_to_silver` and `silver_quality` as independent Spark
+tasks, with dbt build and test tasks preserving the pipeline dependency order.
+
 ## Flink Streaming Processing
 
 Flink reads Confluent-wire Avro records from Kafka, validates the contract, applies
