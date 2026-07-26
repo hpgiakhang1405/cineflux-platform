@@ -1,0 +1,3 @@
+great-expectations==0.18.22
+acryl-datahub-gx-plugin==1.5.0.7
+altair==4.2.2

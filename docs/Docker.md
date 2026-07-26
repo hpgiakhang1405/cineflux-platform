@@ -51,7 +51,7 @@ secrets.
 | `processing` | Messaging and storage dependencies, Spark, Spark History Server, Flink | Distributed batch and stream-processing runtime |
 | `orchestration` | PostgreSQL, Airflow init, webserver, scheduler | Workflow orchestration runtime |
 | `analytics` | Storage dependencies, Superset init, Superset | SQL analytics and visualization runtime |
-| `governance` | PostgreSQL, Kafka, Schema Registry, Elasticsearch, DataHub | Metadata storage, search, events, and governance UI |
+| `governance` | PostgreSQL, MinIO, Hive Metastore, Trino, Kafka, Schema Registry, Elasticsearch, DataHub | Metadata ingestion, search, events, and governance UI |
 | `generator-batch` | MinIO, batch Data Generator | Synthetic Parquet source generation |
 | `generator-stream` | Kafka, Schema Registry, stream Data Generator | Synthetic event-stream generation |
 
@@ -220,7 +220,8 @@ benchmarks always use the optimized image.
 | Data Generator | 476.2 MiB | 138.3 MiB | 71.0% | Multistage wheel build, slim runtime, and non-root user |
 | Spark Jobs | 2,153.8 MiB | 947.1 MiB | 56.0% | Dedicated dependency stages and reuse of the Spark runtime PySpark installation |
 | Flink Jobs | 1,642.2 MiB | 1,381.3 MiB | 15.9% | Multistage dependency build and runtime-only application files |
-| Airflow | 1,986.6 MiB | 1,360.4 MiB | 31.5% | Runtime-only component copies, no pip cache, and package-list cleanup |
+| Airflow | 1,986.6 MiB | 1,360.5 MiB | 31.5% | Runtime-only component copies, no pip cache, and package-list cleanup |
+| DataHub Ingestion | 1,511.7 MiB | 483.7 MiB | 68.0% | Official slim base, connector-only wheels, and BuildKit-mounted wheelhouse |
 
 Both variants were built from the same source revision. Sizes use the image `.Size` field
 from `docker image inspect`, converted from bytes to MiB, so every component uses the same
@@ -233,6 +234,7 @@ make generator-build-baseline generator-build
 make spark-build-baseline spark-build
 make flink-build-baseline flink-build
 make airflow-build-baseline airflow-build
+make governance-build-baseline governance-build
 make docker-image-benchmark
 ```
 

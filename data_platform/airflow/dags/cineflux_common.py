@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
+from airflow.lineage.entities import File, Table
 from airflow.models import Variable
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -44,7 +46,46 @@ DBT_ENVIRONMENT = {
 }
 
 
-def spark_task(task_id: str, application_args: list[str]) -> SparkSubmitOperator:
+def trino_table(schema_variable: str, table: str) -> Table:
+    """Create a lineage table using an Airflow-owned schema setting."""
+    schema = Variable.get(schema_variable)
+    return Table(
+        cluster=Variable.get("lineage_trino_namespace"),
+        database=(
+            f"{Variable.get('lineage_trino_platform_instance')}."
+            f"{Variable.get('iceberg_catalog_name')}"
+        ),
+        name=f"{schema}.{table}",
+    )
+
+
+def postgres_table(schema_variable: str, table: str) -> Table:
+    """Create a lineage table using an Airflow-owned schema setting."""
+    schema = Variable.get(schema_variable)
+    return Table(
+        cluster=Variable.get("lineage_postgres_namespace"),
+        database=(
+            f"{Variable.get('lineage_postgres_platform_instance')}."
+            f"{Variable.get('postgres_database')}"
+        ),
+        name=f"{schema}.{table}",
+    )
+
+
+def landing_file(path_variable: str) -> File:
+    """Create a lineage file using an Airflow-owned landing prefix."""
+    namespace = Variable.get("lineage_landing_namespace").rstrip("/")
+    path = Variable.get(path_variable)
+    return File(f"{namespace}/{path.lstrip('/')}")
+
+
+def spark_task(
+    task_id: str,
+    application_args: list[str],
+    *,
+    inlets: list[Any] | None = None,
+    outlets: list[Any] | None = None,
+) -> SparkSubmitOperator:
     """Create one Spark task using Airflow-owned runtime configuration."""
     return SparkSubmitOperator(
         task_id=task_id,
@@ -65,10 +106,19 @@ def spark_task(task_id: str, application_args: list[str]) -> SparkSubmitOperator
         },
         env_vars=SPARK_ENVIRONMENT,
         status_poll_interval=5,
+        inlets=inlets or [],
+        outlets=outlets or [],
     )
 
 
-def dbt_task(task_id: str, command: str, selector_variable: str) -> DockerOperator:
+def dbt_task(
+    task_id: str,
+    command: str,
+    selector_variable: str,
+    *,
+    inlets: list[Any] | None = None,
+    outlets: list[Any] | None = None,
+) -> DockerOperator:
     """Create one dbt task in the existing optimized dbt image."""
     return DockerOperator(
         task_id=task_id,
@@ -88,4 +138,6 @@ def dbt_task(task_id: str, command: str, selector_variable: str) -> DockerOperat
         mount_tmp_dir=False,
         auto_remove="success",
         force_pull=False,
+        inlets=inlets or [],
+        outlets=outlets or [],
     )

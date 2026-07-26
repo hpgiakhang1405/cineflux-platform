@@ -1,0 +1,23 @@
+source:
+  type: trino
+  config:
+    env: ${DATAHUB_ENV}
+    platform_instance: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+    host_port: ${DBT_TRINO_HOST}:${DBT_TRINO_PORT}
+    database: ${DBT_POSTGRES_CATALOG}
+    username: ${DBT_TRINO_USER}
+    scheme: ${DATAHUB_TRINO_SCHEME}
+    schema_pattern:
+      allow:
+        - ${POSTGRES_SERVING_SCHEMA}
+        - ${POSTGRES_STREAMING_SCHEMA}
+    catalog_to_connector_details:
+      ${DBT_POSTGRES_CATALOG}:
+        connector_platform: postgres
+        platform_instance: ${DATAHUB_POSTGRES_PLATFORM_INSTANCE}
+    trino_as_primary: true
+    ingest_lineage_to_connectors: true
+sink:
+  type: datahub-rest
+  config:
+    server: ${DATAHUB_GMS_URL}

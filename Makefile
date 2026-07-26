@@ -16,6 +16,7 @@ FLINK_JOB_ID ?=
 	generator-stream spark-build spark-build-baseline spark-up spark-dp1 spark-dp2 \
 	flink-build flink-build-baseline flink-up flink-migrate flink-submit flink-cancel flink-reset-data \
 	airflow-build airflow-build-baseline airflow-up airflow-import-check airflow-connections airflow-variables airflow-trigger \
+	governance-build governance-build-baseline governance-up governance-publish governance-verify \
 	docker-image-benchmark \
 	dbt-build dbt-up dbt-debug dbt-smoke dbt-migrate dbt-run dbt-test dbt-docs dbt-docs-serve \
 	storage-prepare storage-lakehouse-files storage-lakehouse-benchmark storage-compact \
@@ -55,6 +56,11 @@ help:
 		'  make airflow-connections' \
 		'  make airflow-variables' \
 		'  make airflow-trigger DAG_ID=dp1_raw_to_bronze' \
+		'  make governance-build' \
+		'  make governance-build-baseline' \
+		'  make governance-up' \
+		'  make governance-publish' \
+		'  make governance-verify' \
 		'  make dbt-build' \
 		'  make dbt-up' \
 		'  make dbt-debug' \
@@ -274,7 +280,8 @@ docker-image-benchmark: check-local-env
 	measure 'Data Generator' '$(DATA_GENERATOR_BASELINE_IMAGE)' '$(DATA_GENERATOR_IMAGE)'; \
 	measure 'Spark Jobs' '$(SPARK_JOBS_BASELINE_IMAGE)' '$(SPARK_JOBS_IMAGE)'; \
 	measure 'Flink Jobs' '$(FLINK_JOBS_BASELINE_IMAGE)' '$(FLINK_JOBS_IMAGE)'; \
-	measure 'Airflow' '$(AIRFLOW_BASELINE_IMAGE)' '$(AIRFLOW_IMAGE)'
+	measure 'Airflow' '$(AIRFLOW_BASELINE_IMAGE)' '$(AIRFLOW_IMAGE)'; \
+	measure 'DataHub Ingest' '$(DATAHUB_INGESTION_BASELINE_IMAGE)' '$(DATAHUB_INGESTION_IMAGE)'
 
 airflow-build:
 	@$(COMPOSE) --profile orchestration build airflow-webserver
@@ -306,6 +313,28 @@ airflow-variables:
 airflow-trigger: check-dag-id
 	@$(COMPOSE) --profile orchestration exec -T airflow-scheduler \
 		airflow dags trigger "$(DAG_ID)"
+
+governance-build:
+	@$(COMPOSE) --profile governance build datahub-ingestion
+
+governance-build-baseline: check-local-env
+	@docker build \
+		--build-arg DATAHUB_INGESTION_BASE_IMAGE="$(DATAHUB_INGESTION_BASE_IMAGE)" \
+		-f docker/datahub/Dockerfile.baseline \
+		-t "$(DATAHUB_INGESTION_BASELINE_IMAGE)" .
+
+governance-up:
+	@$(COMPOSE) --profile governance up -d \
+		postgres minio minio-init hive-metastore trino kafka schema-registry \
+		elasticsearch datahub-upgrade datahub-gms datahub-actions datahub-frontend
+
+governance-publish:
+	@$(COMPOSE) --profile governance run --rm --no-deps datahub-ingestion
+
+governance-verify:
+	@$(COMPOSE) --profile governance run --rm --no-deps \
+		--entrypoint python datahub-ingestion \
+		/opt/cineflux-governance/scripts/verify_governance.py
 
 flink-up:
 	@$(COMPOSE) --profile flink-processing up -d \

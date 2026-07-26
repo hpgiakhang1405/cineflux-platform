@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1.7
+# check=skip=InvalidDefaultArgInFrom
+
+ARG DATAHUB_INGESTION_BASE_IMAGE
+
+FROM ${DATAHUB_INGESTION_BASE_IMAGE}
+USER root
+COPY docker/datahub/requirements.txt /tmp/requirements.txt
+RUN pip uninstall --yes acryl-great-expectations \
+    && pip install --requirement /tmp/requirements.txt
+COPY docker/datahub/recipes /opt/cineflux-governance/recipes
+COPY docker/datahub/scripts /opt/cineflux-governance/scripts
+RUN chmod +x /opt/cineflux-governance/scripts/*.sh
+USER datahub
+WORKDIR /opt/cineflux-governance
+ENTRYPOINT ["/opt/cineflux-governance/scripts/publish.sh"]

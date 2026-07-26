@@ -1,0 +1,19 @@
+source:
+  type: postgres
+  config:
+    env: ${DATAHUB_ENV}
+    platform_instance: ${DATAHUB_POSTGRES_PLATFORM_INSTANCE}
+    host_port: ${POSTGRES_ENDPOINT}
+    database: ${CINEFLUX_POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    schema_pattern:
+      allow:
+        - ${POSTGRES_SERVING_SCHEMA}
+        - ${POSTGRES_STREAMING_SCHEMA}
+    include_usage_statistics: false
+    include_query_lineage: false
+sink:
+  type: datahub-rest
+  config:
+    server: ${DATAHUB_GMS_URL}

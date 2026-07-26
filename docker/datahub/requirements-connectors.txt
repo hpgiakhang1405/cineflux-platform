@@ -1,0 +1,8 @@
+confluent-kafka[avro,schemaregistry]==2.12.2
+fastavro==1.12.2
+grpcio==1.80.0
+grpcio-status==1.71.2
+grpcio-tools==1.71.2
+networkx==3.4.2
+protobuf==5.29.6
+trino[sqlalchemy]==0.336.0

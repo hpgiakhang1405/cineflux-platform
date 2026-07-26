@@ -33,6 +33,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__OPENLINEAGE__NAMESPACE: ${AIRFLOW_OPENLINEAGE_NAMESPACE}
+    AIRFLOW__OPENLINEAGE__TRANSPORT: ${AIRFLOW_OPENLINEAGE_TRANSPORT}
   volumes:
     - airflow-logs:/opt/airflow/logs
   networks: [cineflux-network]
@@ -61,6 +63,57 @@ x-datahub-common-environment: &datahub-common-environment
   ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
   KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVERS}
   KAFKA_SCHEMAREGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+
+x-datahub-ingestion: &datahub-ingestion
+  image: ${DATAHUB_INGESTION_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: docker/datahub/Dockerfile
+    args:
+      DATAHUB_INGESTION_SLIM_BASE_IMAGE: ${DATAHUB_INGESTION_SLIM_BASE_IMAGE}
+  profiles: [governance]
+  restart: "no"
+  environment:
+    DATAHUB_TELEMETRY_ENABLED: "false"
+    PYTHONUNBUFFERED: "1"
+    DATAHUB_GMS_URL: ${DATAHUB_GMS_URL}
+    DATAHUB_ENV: ${DATAHUB_ENV}
+    AIRFLOW_OPENLINEAGE_NAMESPACE: ${AIRFLOW_OPENLINEAGE_NAMESPACE}
+    DATAHUB_TRINO_PLATFORM_INSTANCE: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+    DATAHUB_TRINO_SCHEME: ${DATAHUB_TRINO_SCHEME}
+    DATAHUB_ICEBERG_PLATFORM_INSTANCE: ${DATAHUB_ICEBERG_PLATFORM_INSTANCE}
+    DATAHUB_POSTGRES_PLATFORM_INSTANCE: ${DATAHUB_POSTGRES_PLATFORM_INSTANCE}
+    DATAHUB_KAFKA_PLATFORM_INSTANCE: ${DATAHUB_KAFKA_PLATFORM_INSTANCE}
+    DATAHUB_OWNER_GROUP: ${DATAHUB_OWNER_GROUP}
+    DATAHUB_DOMAIN_ID: ${DATAHUB_DOMAIN_ID}
+    DATAHUB_DOMAIN_NAME: ${DATAHUB_DOMAIN_NAME}
+    POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+    MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+    HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+    KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+    SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+    DBT_TRINO_HOST: ${DBT_TRINO_HOST}
+    DBT_TRINO_PORT: ${DBT_TRINO_PORT}
+    DBT_TRINO_USER: ${DBT_TRINO_USER}
+    DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+    DBT_ICEBERG_CATALOG: ${DBT_ICEBERG_CATALOG}
+    DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
+    AIRFLOW_BRONZE_SCHEMA: ${AIRFLOW_BRONZE_SCHEMA}
+    DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
+    DBT_GOLD_SCHEMA: ${DBT_GOLD_SCHEMA}
+    DBT_FEATURE_SCHEMA: ${DBT_FEATURE_SCHEMA}
+    POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+    POSTGRES_STREAMING_SCHEMA: ${POSTGRES_STREAMING_SCHEMA}
+  volumes:
+    - ./artifacts/dbt:/opt/cineflux-governance/artifacts/dbt:ro
+  networks: [cineflux-network]
 
 x-data-generator-common: &data-generator-common
   image: ${DATA_GENERATOR_IMAGE}
@@ -140,7 +193,7 @@ services:
 
   minio:
     image: ${MINIO_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, governance, generator-batch]
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -162,7 +215,7 @@ services:
 
   minio-init:
     image: ${MINIO_MC_IMAGE}
-    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, generator-batch]
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, governance, generator-batch]
     restart: "no"
     depends_on:
       minio:
@@ -286,7 +339,7 @@ services:
 
   hive-metastore:
     image: ${HIVE_METASTORE_IMAGE}
-    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics]
+    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics, governance]
     pull_policy: build
     build:
       context: .
@@ -324,7 +377,7 @@ services:
 
   trino:
     image: ${TRINO_IMAGE}
-    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics]
+    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics, governance]
     restart: unless-stopped
     depends_on:
       hive-metastore:
@@ -625,6 +678,9 @@ services:
       DBT_TRINO_PORT: ${DBT_TRINO_PORT}
       DBT_TRINO_USER: ${DBT_TRINO_USER}
       DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+      DATAHUB_TRINO_SCHEME: ${DATAHUB_TRINO_SCHEME}
+      DATAHUB_TRINO_PLATFORM_INSTANCE: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+      DATAHUB_POSTGRES_PLATFORM_INSTANCE: ${DATAHUB_POSTGRES_PLATFORM_INSTANCE}
       DBT_THREADS: ${DBT_THREADS}
       DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
       DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
@@ -831,6 +887,19 @@ services:
       retries: 18
       start_period: 45s
     networks: [cineflux-network]
+
+  datahub-ingestion:
+    <<: *datahub-ingestion
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+      trino:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    command: []
 
   superset-init:
     image: ${SUPERSET_RUNTIME_IMAGE}

@@ -49,6 +49,8 @@ Phase 1 focuses on the data-platform foundation:
   analytical marts, offline features, and the PostgreSQL serving copy.
 - [Airflow Orchestration](docs/Orchestration.md) coordinates the batch pipelines and
   Iceberg maintenance with explicit ingest and validation stages.
+- [DataHub Governance](docs/DataGovernance.md) catalogs platform metadata and presents
+  runtime lineage, validation results, contracts, ownership, domains, and tags.
 
 ## Documentation
 
