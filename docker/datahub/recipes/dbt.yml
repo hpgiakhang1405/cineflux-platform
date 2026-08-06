@@ -1,0 +1,19 @@
+source:
+  type: dbt
+  config:
+    env: ${DATAHUB_ENV}
+    target_platform: trino
+    target_platform_instance: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+    manifest_path: /opt/cineflux-governance/artifacts/dbt/manifest.json
+    catalog_path: /opt/cineflux-governance/artifacts/dbt/catalog.json
+    run_results_paths:
+      - /opt/cineflux-governance/artifacts/dbt/run_results.json
+    entities_enabled:
+      test_definitions: YES
+      test_results: YES
+    include_column_lineage: true
+    include_compiled_code: true
+sink:
+  type: datahub-rest
+  config:
+    server: ${DATAHUB_GMS_URL}

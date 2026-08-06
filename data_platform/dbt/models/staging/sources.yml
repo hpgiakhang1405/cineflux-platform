@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Validated Iceberg Silver tables produced by the Spark batch processing jobs.
+    database: "{{ env_var('DBT_ICEBERG_CATALOG') }}"
+    schema: "{{ env_var('DBT_SILVER_SCHEMA') }}"
+    tables:
+      - name: stg_users
+        description: Deduplicated append-only user profile versions.
+      - name: stg_subscriptions
+        description: Deduplicated append-only subscription versions.
+      - name: stg_content
+        description: Deduplicated append-only content metadata versions.
+      - name: int_playback_sessions
+        description: One normalized row per historical playback session.

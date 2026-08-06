@@ -1,0 +1,25 @@
+source:
+  type: trino
+  config:
+    env: ${DATAHUB_ENV}
+    platform_instance: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+    host_port: ${DBT_TRINO_HOST}:${DBT_TRINO_PORT}
+    database: ${DBT_ICEBERG_CATALOG}
+    username: ${DBT_TRINO_USER}
+    scheme: ${DATAHUB_TRINO_SCHEME}
+    schema_pattern:
+      allow:
+        - ${AIRFLOW_BRONZE_SCHEMA}
+        - ${DBT_SILVER_SCHEMA}
+        - ${DBT_GOLD_SCHEMA}
+        - ${DBT_FEATURE_SCHEMA}
+    catalog_to_connector_details:
+      ${DBT_ICEBERG_CATALOG}:
+        connector_platform: iceberg
+        platform_instance: ${DATAHUB_ICEBERG_PLATFORM_INSTANCE}
+    trino_as_primary: true
+    ingest_lineage_to_connectors: true
+sink:
+  type: datahub-rest
+  config:
+    server: ${DATAHUB_GMS_URL}

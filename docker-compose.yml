@@ -1,0 +1,992 @@
+name: cineflux-platform
+
+x-postgres-environment: &postgres-environment
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+  CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+  HIVE_METASTORE_DB: ${HIVE_METASTORE_DB}
+  AIRFLOW_DB: ${AIRFLOW_DB}
+  SUPERSET_DB: ${SUPERSET_DB}
+  DATAHUB_DB: ${DATAHUB_DB}
+  POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+  POSTGRES_STREAMING_SCHEMA: ${POSTGRES_STREAMING_SCHEMA}
+
+x-airflow-common: &airflow-common
+  image: ${AIRFLOW_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/airflow/Dockerfile
+    args:
+      AIRFLOW_BASE_IMAGE: ${AIRFLOW_BASE_IMAGE}
+      SPARK_JOBS_IMAGE: ${SPARK_JOBS_IMAGE}
+      AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+      AIRFLOW_PYTHON_VERSION: ${AIRFLOW_PYTHON_VERSION}
+  profiles: [orchestration]
+  restart: unless-stopped
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_ENDPOINT}/${AIRFLOW_DB}
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__OPENLINEAGE__NAMESPACE: ${AIRFLOW_OPENLINEAGE_NAMESPACE}
+    AIRFLOW__OPENLINEAGE__TRANSPORT: ${AIRFLOW_OPENLINEAGE_TRANSPORT}
+  volumes:
+    - airflow-logs:/opt/airflow/logs
+  networks: [cineflux-network]
+
+x-datahub-database-environment: &datahub-database-environment
+  EBEAN_DATASOURCE_DRIVER: org.postgresql.Driver
+  EBEAN_DATASOURCE_HOST: ${POSTGRES_ENDPOINT}
+  EBEAN_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_ENDPOINT}/${DATAHUB_DB}
+  EBEAN_DATASOURCE_USERNAME: ${POSTGRES_USER}
+  EBEAN_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+  EBEAN_POSTGRES_USE_AWS_IAM_AUTH: "false"
+
+x-datahub-search-environment: &datahub-search-environment
+  ELASTICSEARCH_HOST: ${ELASTICSEARCH_HOST}
+  ELASTICSEARCH_PORT: ${ELASTICSEARCH_INTERNAL_PORT}
+  ELASTICSEARCH_PROTOCOL: ${ELASTICSEARCH_PROTOCOL}
+  ELASTICSEARCH_USE_SSL: "false"
+  ELASTICSEARCH_IMPLEMENTATION: elasticsearch
+  GRAPH_SERVICE_IMPL: elasticsearch
+
+x-datahub-common-environment: &datahub-common-environment
+  DATAHUB_BASE_PATH: /
+  DATAHUB_GMS_BASE_PATH: /
+  DATAHUB_TOKEN_SERVICE_SIGNING_KEY: ${DATAHUB_TOKEN_SERVICE_SIGNING_KEY}
+  DATAHUB_TOKEN_SERVICE_SALT: ${DATAHUB_TOKEN_SERVICE_SALT}
+  ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
+  KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVERS}
+  KAFKA_SCHEMAREGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+
+x-datahub-ingestion: &datahub-ingestion
+  image: ${DATAHUB_INGESTION_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: docker/datahub/Dockerfile
+    args:
+      DATAHUB_INGESTION_SLIM_BASE_IMAGE: ${DATAHUB_INGESTION_SLIM_BASE_IMAGE}
+  profiles: [governance]
+  restart: "no"
+  environment:
+    DATAHUB_TELEMETRY_ENABLED: "false"
+    PYTHONUNBUFFERED: "1"
+    DATAHUB_GMS_URL: ${DATAHUB_GMS_URL}
+    DATAHUB_ENV: ${DATAHUB_ENV}
+    AIRFLOW_OPENLINEAGE_NAMESPACE: ${AIRFLOW_OPENLINEAGE_NAMESPACE}
+    DATAHUB_TRINO_PLATFORM_INSTANCE: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+    DATAHUB_TRINO_SCHEME: ${DATAHUB_TRINO_SCHEME}
+    DATAHUB_ICEBERG_PLATFORM_INSTANCE: ${DATAHUB_ICEBERG_PLATFORM_INSTANCE}
+    DATAHUB_POSTGRES_PLATFORM_INSTANCE: ${DATAHUB_POSTGRES_PLATFORM_INSTANCE}
+    DATAHUB_KAFKA_PLATFORM_INSTANCE: ${DATAHUB_KAFKA_PLATFORM_INSTANCE}
+    DATAHUB_OWNER_GROUP: ${DATAHUB_OWNER_GROUP}
+    DATAHUB_DOMAIN_ID: ${DATAHUB_DOMAIN_ID}
+    DATAHUB_DOMAIN_NAME: ${DATAHUB_DOMAIN_NAME}
+    POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+    MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+    HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+    KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+    SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+    DBT_TRINO_HOST: ${DBT_TRINO_HOST}
+    DBT_TRINO_PORT: ${DBT_TRINO_PORT}
+    DBT_TRINO_USER: ${DBT_TRINO_USER}
+    DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+    DBT_ICEBERG_CATALOG: ${DBT_ICEBERG_CATALOG}
+    DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
+    AIRFLOW_BRONZE_SCHEMA: ${AIRFLOW_BRONZE_SCHEMA}
+    DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
+    DBT_GOLD_SCHEMA: ${DBT_GOLD_SCHEMA}
+    DBT_FEATURE_SCHEMA: ${DBT_FEATURE_SCHEMA}
+    POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+    POSTGRES_STREAMING_SCHEMA: ${POSTGRES_STREAMING_SCHEMA}
+  volumes:
+    - ./artifacts/dbt:/opt/cineflux-governance/artifacts/dbt:ro
+  networks: [cineflux-network]
+
+x-data-generator-common: &data-generator-common
+  image: ${DATA_GENERATOR_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/generator/Dockerfile
+    args:
+      UV_IMAGE: ${UV_IMAGE}
+      PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE}
+  restart: "no"
+  command: [--help]
+  networks: [cineflux-network]
+
+x-spark-image: &spark-image
+  image: ${SPARK_JOBS_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/spark_jobs/Dockerfile
+    args:
+      ALPINE_IMAGE: ${ALPINE_IMAGE}
+      SPARK_IMAGE: ${SPARK_IMAGE}
+      UV_IMAGE: ${UV_IMAGE}
+      ICEBERG_VERSION: ${ICEBERG_VERSION}
+      HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
+      AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
+
+x-dbt-image: &dbt-image
+  image: ${DBT_JOBS_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/dbt/Dockerfile
+    args:
+      DBT_PYTHON_RUNTIME_IMAGE: ${DBT_PYTHON_RUNTIME_IMAGE}
+      UV_IMAGE: ${UV_IMAGE}
+
+x-flink-image: &flink-image
+  image: ${FLINK_JOBS_IMAGE}
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: data_platform/flink_jobs/Dockerfile
+    args:
+      FLINK_BASE_IMAGE: ${FLINK_IMAGE}
+      UV_IMAGE: ${UV_IMAGE}
+      PYTHON_VERSION: ${FLINK_PYTHON_VERSION}
+      FLINK_VERSION: ${FLINK_VERSION}
+      FLINK_KAFKA_CONNECTOR_VERSION: ${FLINK_KAFKA_CONNECTOR_VERSION}
+      FLINK_JDBC_CONNECTOR_VERSION: ${FLINK_JDBC_CONNECTOR_VERSION}
+      POSTGRES_JDBC_VERSION: ${POSTGRES_JDBC_VERSION}
+      ROCKSDB_JAR_SHA1: ${ROCKSDB_JAR_SHA1}
+      KAFKA_CONNECTOR_JAR_SHA1: ${KAFKA_CONNECTOR_JAR_SHA1}
+      JDBC_CONNECTOR_JAR_SHA1: ${JDBC_CONNECTOR_JAR_SHA1}
+      POSTGRES_JDBC_JAR_SHA1: ${POSTGRES_JDBC_JAR_SHA1}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, governance]
+    restart: unless-stopped
+    environment: *postgres-environment
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./schemas/postgresql:/platform-migrations:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ${POSTGRES_USER} -d ${CINEFLUX_POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [cineflux-network]
+
+  minio:
+    image: ${MINIO_IMAGE}
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, governance, generator-batch]
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_REGION_NAME: ${MINIO_REGION}
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:9000/minio/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [cineflux-network]
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE}
+    profiles: [storage, processing, spark-processing, flink-processing, dbt-processing, orchestration, analytics, governance, generator-batch]
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_LANDING_BUCKET: ${MINIO_LANDING_BUCKET}
+      MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+      MINIO_CHECKPOINT_BUCKET: ${MINIO_CHECKPOINT_BUCKET}
+    entrypoint: [/bin/sh, -c]
+    command:
+      - |
+        mc alias set local "$${MINIO_ENDPOINT}" "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing "local/$${MINIO_LANDING_BUCKET}"
+        mc mb --ignore-existing "local/$${MINIO_WAREHOUSE_BUCKET}"
+        mc mb --ignore-existing "local/$${MINIO_CHECKPOINT_BUCKET}"
+        mc ls local
+    networks: [cineflux-network]
+
+  kafka:
+    image: ${KAFKA_IMAGE}
+    profiles: [messaging, processing, flink-processing, governance, generator-stream]
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_BOOTSTRAP_SERVERS},PLAINTEXT_HOST://localhost:${KAFKA_PORT}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "${KAFKA_PORT}:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: [CMD-SHELL, "kafka-topics --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks: [cineflux-network]
+
+  schema-registry:
+    image: ${SCHEMA_REGISTRY_IMAGE}
+    profiles: [messaging, processing, flink-processing, governance, generator-stream]
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://${KAFKA_BOOTSTRAP_SERVERS}
+    ports:
+      - "${SCHEMA_REGISTRY_PORT}:8081"
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:8081/subjects >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [cineflux-network]
+
+  kafka-ui:
+    image: ${KAFKA_UI_IMAGE}
+    profiles: [messaging, processing, flink-processing]
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: cineflux-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: ${SCHEMA_REGISTRY_URL}
+      DYNAMIC_CONFIG_ENABLED: "false"
+    ports:
+      - "${KAFKA_UI_PORT}:8080"
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O /dev/null http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [cineflux-network]
+
+  batch-data-generator:
+    <<: *data-generator-common
+    profiles: [generator-batch]
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_LANDING_BUCKET: ${MINIO_LANDING_BUCKET}
+
+  stream-data-generator:
+    <<: *data-generator-common
+    profiles: [generator-stream]
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+      PLAYBACK_AVRO_SCHEMA_PATH: ${PLAYBACK_AVRO_SCHEMA_PATH}
+
+  hive-metastore:
+    image: ${HIVE_METASTORE_IMAGE}
+    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics, governance]
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/hive_metastore/Dockerfile
+      args:
+        HIVE_IMAGE: ${HIVE_IMAGE}
+        ALPINE_IMAGE: ${ALPINE_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://${POSTGRES_ENDPOINT}/${HIVE_METASTORE_DB}
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+        -Dmetastore.warehouse.dir=s3a://${MINIO_WAREHOUSE_BUCKET}/
+    ports:
+      - "${HIVE_METASTORE_PORT}:9083"
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9083'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    networks: [cineflux-network]
+
+  trino:
+    image: ${TRINO_IMAGE}
+    profiles: [storage, processing, spark-processing, dbt-processing, orchestration, analytics, governance]
+    restart: unless-stopped
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_REGION: ${MINIO_REGION}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${TRINO_PORT}:8080"
+    volumes:
+      - ./docker/trino/catalog:/etc/trino/catalog:ro
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:8080/v1/info >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [cineflux-network]
+
+  spark-events-init:
+    image: ${ALPINE_IMAGE}
+    profiles: [processing, spark-processing, orchestration]
+    restart: "no"
+    command: [/bin/sh, -c, "chmod 0777 /opt/spark/events"]
+    volumes:
+      - spark-events:/opt/spark/events
+    networks: [cineflux-network]
+
+  spark-master:
+    <<: *spark-image
+    profiles: [processing, spark-processing, orchestration]
+    restart: unless-stopped
+    depends_on:
+      spark-events-init:
+        condition: service_completed_successfully
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - spark-master
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+    ports:
+      - "7077:7077"
+      - "${SPARK_MASTER_UI_PORT}:8080"
+    volumes:
+      - spark-events:/opt/spark/events
+      - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [cineflux-network]
+
+  spark-worker:
+    <<: *spark-image
+    profiles: [processing, spark-processing, orchestration]
+    restart: unless-stopped
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES}
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY}
+    volumes:
+      - spark-events:/opt/spark/events
+      - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8081'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [cineflux-network]
+
+  spark-history-server:
+    <<: *spark-image
+    profiles: [processing, spark-processing, orchestration]
+    restart: unless-stopped
+    depends_on:
+      spark-events-init:
+        condition: service_completed_successfully
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.history.HistoryServer
+    environment:
+      SPARK_HISTORY_OPTS: >-
+        -Dspark.history.fs.logDirectory=file:/opt/spark/events
+        -Dspark.history.ui.port=18080
+    ports:
+      - "${SPARK_HISTORY_UI_PORT}:18080"
+    volumes:
+      - spark-events:/opt/spark/events
+      - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/18080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [cineflux-network]
+
+  spark-jobs:
+    <<: *spark-image
+    profiles: [processing, spark-processing]
+    restart: "no"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+      HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_LANDING_BUCKET: ${MINIO_LANDING_BUCKET}
+      MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+      CUTOVER_TIMESTAMP: ${CUTOVER_TIMESTAMP}
+      ICEBERG_CATALOG_NAME: ${ICEBERG_CATALOG_NAME}
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - ${SPARK_MASTER_URL}
+      - --deploy-mode
+      - client
+      - --conf
+      - spark.driver.memory=${SPARK_DRIVER_MEMORY}
+      - --conf
+      - spark.driver.host=spark-jobs
+      - --conf
+      - spark.driver.bindAddress=0.0.0.0
+      - /app/src/spark_jobs/cli.py
+    command: [--help]
+    volumes:
+      - spark-events:/opt/spark/events
+      - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    networks: [cineflux-network]
+
+  dbt-jobs:
+    <<: *dbt-image
+    profiles: [dbt-processing]
+    restart: "no"
+    depends_on:
+      trino:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      DBT_TARGET: ${DBT_TARGET}
+      DBT_TRINO_HOST: ${DBT_TRINO_HOST}
+      DBT_TRINO_PORT: ${DBT_TRINO_PORT}
+      DBT_TRINO_USER: ${DBT_TRINO_USER}
+      DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+      DBT_THREADS: ${DBT_THREADS}
+      DBT_ICEBERG_CATALOG: ${DBT_ICEBERG_CATALOG}
+      DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
+      DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
+      DBT_GOLD_SCHEMA: ${DBT_GOLD_SCHEMA}
+      DBT_FEATURE_SCHEMA: ${DBT_FEATURE_SCHEMA}
+      POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+    ports:
+      - "${DBT_DOCS_PORT}:8080"
+    volumes:
+      - ./artifacts/dbt:/app/target
+    networks: [cineflux-network]
+
+  flink-jobmanager:
+    <<: *flink-image
+    profiles: [processing, flink-processing]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    command: jobmanager
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_STREAMING_SCHEMA: ${POSTGRES_STREAMING_SCHEMA}
+      MINIO_CHECKPOINT_BUCKET: ${MINIO_CHECKPOINT_BUCKET}
+      PLAYBACK_AVRO_SCHEMA_PATH: ${PLAYBACK_AVRO_SCHEMA_PATH}
+      PLAYBACK_DLQ_AVRO_SCHEMA_PATH: ${PLAYBACK_DLQ_AVRO_SCHEMA_PATH}
+      PYFLINK_PYTHON_EXECUTABLE: ${PYFLINK_PYTHON_EXECUTABLE}
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        rest.address: 0.0.0.0
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS}
+        parallelism.default: ${FLINK_DEFAULT_PARALLELISM}
+        s3.endpoint: ${MINIO_ENDPOINT}
+        s3.path.style.access: true
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.connection.ssl.enabled: false
+    ports:
+      - "${FLINK_UI_PORT}:8081"
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:8081/overview >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [cineflux-network]
+
+  flink-taskmanager:
+    <<: *flink-image
+    profiles: [processing, flink-processing]
+    restart: unless-stopped
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    command: taskmanager
+    environment:
+      PYFLINK_PYTHON_EXECUTABLE: ${PYFLINK_PYTHON_EXECUTABLE}
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS}
+        parallelism.default: ${FLINK_DEFAULT_PARALLELISM}
+        s3.endpoint: ${MINIO_ENDPOINT}
+        s3.path.style.access: true
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.connection.ssl.enabled: false
+    volumes:
+      - flink-state:/opt/flink/state
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://flink-jobmanager:8081/taskmanagers | grep -q taskmanagers"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [cineflux-network]
+
+  airflow-init:
+    <<: *airflow-common
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_ENDPOINT}/${AIRFLOW_DB}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+      AIRFLOW_ADMIN_FIRSTNAME: ${AIRFLOW_ADMIN_FIRSTNAME}
+      AIRFLOW_ADMIN_LASTNAME: ${AIRFLOW_ADMIN_LASTNAME}
+      AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      CINEFLUX_POSTGRES_DB: ${CINEFLUX_POSTGRES_DB}
+      POSTGRES_SERVING_SCHEMA: ${POSTGRES_SERVING_SCHEMA}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_LANDING_BUCKET: ${MINIO_LANDING_BUCKET}
+      MINIO_WAREHOUSE_BUCKET: ${MINIO_WAREHOUSE_BUCKET}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      HIVE_METASTORE_URI: ${HIVE_METASTORE_URI}
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY}
+      CUTOVER_TIMESTAMP: ${CUTOVER_TIMESTAMP}
+      ICEBERG_CATALOG_NAME: ${ICEBERG_CATALOG_NAME}
+      DBT_JOBS_IMAGE: ${DBT_JOBS_IMAGE}
+      DBT_TARGET: ${DBT_TARGET}
+      DBT_TRINO_HOST: ${DBT_TRINO_HOST}
+      DBT_TRINO_PORT: ${DBT_TRINO_PORT}
+      DBT_TRINO_USER: ${DBT_TRINO_USER}
+      DBT_TRINO_HTTP_SCHEME: ${DBT_TRINO_HTTP_SCHEME}
+      DATAHUB_TRINO_SCHEME: ${DATAHUB_TRINO_SCHEME}
+      DATAHUB_TRINO_PLATFORM_INSTANCE: ${DATAHUB_TRINO_PLATFORM_INSTANCE}
+      DATAHUB_POSTGRES_PLATFORM_INSTANCE: ${DATAHUB_POSTGRES_PLATFORM_INSTANCE}
+      DBT_THREADS: ${DBT_THREADS}
+      DBT_POSTGRES_CATALOG: ${DBT_POSTGRES_CATALOG}
+      DBT_SILVER_SCHEMA: ${DBT_SILVER_SCHEMA}
+      DBT_GOLD_SCHEMA: ${DBT_GOLD_SCHEMA}
+      DBT_FEATURE_SCHEMA: ${DBT_FEATURE_SCHEMA}
+      AIRFLOW_BRONZE_SCHEMA: ${AIRFLOW_BRONZE_SCHEMA}
+      AIRFLOW_LANDING_SCENARIO: ${AIRFLOW_LANDING_SCENARIO}
+      AIRFLOW_LANDING_BOOTSTRAP_PREFIX: ${AIRFLOW_LANDING_BOOTSTRAP_PREFIX}
+      AIRFLOW_LANDING_RECURRING_PREFIX: ${AIRFLOW_LANDING_RECURRING_PREFIX}
+      AIRFLOW_SPARK_APPLICATION_PATH: ${AIRFLOW_SPARK_APPLICATION_PATH}
+      AIRFLOW_SPARK_PY_FILES_PATH: ${AIRFLOW_SPARK_PY_FILES_PATH}
+      AIRFLOW_SPARK_DP1_CONFIG_PATH: ${AIRFLOW_SPARK_DP1_CONFIG_PATH}
+      AIRFLOW_SPARK_DP2_CONFIG_PATH: ${AIRFLOW_SPARK_DP2_CONFIG_PATH}
+      AIRFLOW_SPARK_COMPACTION_CONFIG_PATH: ${AIRFLOW_SPARK_COMPACTION_CONFIG_PATH}
+      AIRFLOW_SPARK_SNAPSHOT_EXPIRATION_CONFIG_PATH: ${AIRFLOW_SPARK_SNAPSHOT_EXPIRATION_CONFIG_PATH}
+      AIRFLOW_SPARK_JARS: ${AIRFLOW_SPARK_JARS}
+      AIRFLOW_SPARK_DRIVER_HOST: ${AIRFLOW_SPARK_DRIVER_HOST}
+      AIRFLOW_SPARK_DRIVER_PYTHON: ${AIRFLOW_SPARK_DRIVER_PYTHON}
+      AIRFLOW_SPARK_EXECUTOR_PYTHON: ${AIRFLOW_SPARK_EXECUTOR_PYTHON}
+      AIRFLOW_SPARK_EVENT_LOG_DIR: ${AIRFLOW_SPARK_EVENT_LOG_DIR}
+      AIRFLOW_DBT_PROJECT_DIR: ${AIRFLOW_DBT_PROJECT_DIR}
+      AIRFLOW_DBT_PROFILES_DIR: ${AIRFLOW_DBT_PROFILES_DIR}
+      AIRFLOW_DBT_DP2_SELECTOR: ${AIRFLOW_DBT_DP2_SELECTOR}
+      AIRFLOW_DBT_DP3_SELECTOR: ${AIRFLOW_DBT_DP3_SELECTOR}
+      DOCKER_ENGINE_URL: ${DOCKER_ENGINE_URL}
+      DOCKER_NETWORK_NAME: ${DOCKER_NETWORK_NAME}
+      AIRFLOW_PIPELINE_RETRIES: ${AIRFLOW_PIPELINE_RETRIES}
+      AIRFLOW_PIPELINE_RETRY_DELAY_MINUTES: ${AIRFLOW_PIPELINE_RETRY_DELAY_MINUTES}
+      AIRFLOW_ICEBERG_MAINTENANCE_SCHEDULE: ${AIRFLOW_ICEBERG_MAINTENANCE_SCHEDULE}
+    entrypoint: /opt/airflow/scripts/bootstrap_airflow.sh
+    command: []
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "${AIRFLOW_UI_PORT}:8080"
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    group_add:
+      - "${DOCKER_GID}"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      trino:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - airflow-logs:/opt/airflow/logs
+      - spark-events:/opt/spark/events
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: [CMD-SHELL, "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  elasticsearch:
+    image: ${ELASTICSEARCH_IMAGE}
+    profiles: [governance]
+    restart: unless-stopped
+    mem_limit: ${ELASTICSEARCH_MEMORY_LIMIT}
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    ports:
+      - "${ELASTICSEARCH_PORT}:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+      start_period: 45s
+    networks: [cineflux-network]
+
+  datahub-upgrade:
+    image: acryldata/datahub-upgrade:${DATAHUB_VERSION}
+    profiles: [governance]
+    restart: "no"
+    mem_limit: ${DATAHUB_UPGRADE_MEMORY_LIMIT}
+    command: [-u, SystemUpdate]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      <<: [*datahub-common-environment, *datahub-database-environment, *datahub-search-environment]
+      CREATE_USER: "false"
+      DATAHUB_PRECREATE_TOPICS: "true"
+      DATAHUB_SQL_SETUP_ENABLED: "true"
+      DATAHUB_PARTITIONS: 3
+      ENTITY_VERSIONING_ENABLED: "true"
+    networks: [cineflux-network]
+
+  datahub-gms:
+    image: acryldata/datahub-gms:${DATAHUB_VERSION}
+    profiles: [governance]
+    restart: unless-stopped
+    mem_limit: ${DATAHUB_GMS_MEMORY_LIMIT}
+    depends_on:
+      datahub-upgrade:
+        condition: service_completed_successfully
+    environment:
+      <<: [*datahub-common-environment, *datahub-database-environment, *datahub-search-environment]
+      ALTERNATE_MCP_VALIDATION: "true"
+      DATAHUB_SERVER_TYPE: quickstart
+      DATAHUB_TELEMETRY_ENABLED: "false"
+      ENTITY_VERSIONING_ENABLED: "true"
+      JAVA_OPTS: -Xms1g -Xmx1g
+      MAE_CONSUMER_ENABLED: "true"
+      MCE_CONSUMER_ENABLED: "true"
+      METADATA_SERVICE_AUTH_ENABLED: "false"
+      STRICT_URN_VALIDATION_ENABLED: "true"
+      THEME_V2_DEFAULT: "true"
+    ports:
+      - "${DATAHUB_GMS_PORT}:8080"
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 90s
+    networks: [cineflux-network]
+
+  datahub-actions:
+    image: acryldata/datahub-actions:${DATAHUB_VERSION}-slim
+    profiles: [governance]
+    restart: unless-stopped
+    mem_limit: ${DATAHUB_ACTIONS_MEMORY_LIMIT}
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+    environment:
+      <<: *datahub-search-environment
+      ACTIONS_CONFIG: ""
+      ACTIONS_EXTRA_PACKAGES: ""
+      DATAHUB_GMS_HOST: ${DATAHUB_GMS_HOST}
+      DATAHUB_GMS_PORT: ${DATAHUB_GMS_INTERNAL_PORT}
+      DATAHUB_GMS_PROTOCOL: ${DATAHUB_GMS_PROTOCOL}
+      DATAHUB_SYSTEM_CLIENT_ID: __datahub_system
+      DATAHUB_SYSTEM_CLIENT_SECRET: ${DATAHUB_SYSTEM_CLIENT_SECRET}
+      KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+    networks: [cineflux-network]
+
+  datahub-frontend:
+    image: acryldata/datahub-frontend-react:${DATAHUB_VERSION}
+    profiles: [governance]
+    restart: unless-stopped
+    mem_limit: ${DATAHUB_FRONTEND_MEMORY_LIMIT}
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+    environment:
+      DATAHUB_APP_VERSION: ${DATAHUB_VERSION}
+      DATAHUB_BASE_PATH: /
+      DATAHUB_GMS_BASE_PATH: /
+      DATAHUB_GMS_HOST: ${DATAHUB_GMS_HOST}
+      DATAHUB_GMS_PORT: ${DATAHUB_GMS_INTERNAL_PORT}
+      DATAHUB_PLAY_MEM_BUFFER_SIZE: 10MB
+      DATAHUB_SECRET: ${DATAHUB_FRONTEND_SECRET}
+      DATAHUB_TRACKING_TOPIC: DataHubUsageEvent_v1
+      ELASTIC_CLIENT_HOST: ${ELASTICSEARCH_HOST}
+      ELASTIC_CLIENT_PORT: ${ELASTICSEARCH_INTERNAL_PORT}
+      JAVA_OPTS: >-
+        -Xms512m -Xmx512m -Dhttp.port=9002
+        -Dconfig.file=datahub-frontend/conf/application.conf
+        -Djava.security.auth.login.config=datahub-frontend/conf/jaas.conf
+        -Dlogback.configurationFile=datahub-frontend/conf/logback.xml
+        -Dpidfile.path=/dev/null
+      KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVERS}
+      PLAY_HTTP_CONTEXT: /
+      THEME_V2_DEFAULT: "true"
+    ports:
+      - "${DATAHUB_UI_PORT}:9002"
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:9002/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
+    networks: [cineflux-network]
+
+  datahub-ingestion:
+    <<: *datahub-ingestion
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+      trino:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    command: []
+
+  superset-init:
+    image: ${SUPERSET_RUNTIME_IMAGE}
+    profiles: [analytics]
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/superset/Dockerfile
+      args:
+        SUPERSET_IMAGE: ${SUPERSET_IMAGE}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      SUPERSET_DB: ${SUPERSET_DB}
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD}
+      SUPERSET_ADMIN_FIRSTNAME: ${SUPERSET_ADMIN_FIRSTNAME}
+      SUPERSET_ADMIN_LASTNAME: ${SUPERSET_ADMIN_LASTNAME}
+      SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL}
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    volumes:
+      - ./docker/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        superset db upgrade
+        if ! superset fab list-users | grep -q "$${SUPERSET_ADMIN_USERNAME}"; then
+          superset fab create-admin \
+            --username "$${SUPERSET_ADMIN_USERNAME}" \
+            --password "$${SUPERSET_ADMIN_PASSWORD}" \
+            --firstname "$${SUPERSET_ADMIN_FIRSTNAME}" \
+            --lastname "$${SUPERSET_ADMIN_LASTNAME}" \
+            --email "$${SUPERSET_ADMIN_EMAIL}"
+        fi
+        superset init
+    networks: [cineflux-network]
+
+  superset:
+    image: ${SUPERSET_RUNTIME_IMAGE}
+    profiles: [analytics]
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/superset/Dockerfile
+      args:
+        SUPERSET_IMAGE: ${SUPERSET_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+      trino:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_ENDPOINT: ${POSTGRES_ENDPOINT}
+      SUPERSET_DB: ${SUPERSET_DB}
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    ports:
+      - "${SUPERSET_UI_PORT}:8088"
+    volumes:
+      - ./docker/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+    healthcheck:
+      test: [CMD-SHELL, "curl --fail --silent http://localhost:8088/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
+    networks: [cineflux-network]
+
+networks:
+  cineflux-network:
+    name: cineflux-network
+
+volumes:
+  postgres-data:
+  minio-data:
+  kafka-data:
+  spark-events:
+  flink-state:
+  airflow-logs:
+  elasticsearch-data:

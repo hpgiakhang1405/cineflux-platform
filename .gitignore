@@ -1,0 +1,28 @@
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Generated local artifacts
+docs/assets/docker/*.tmp
+artifacts/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*:Zone.Identifier

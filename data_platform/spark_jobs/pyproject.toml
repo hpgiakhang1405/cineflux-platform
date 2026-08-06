@@ -1,0 +1,21 @@
+[project]
+name = "cineflux-spark-jobs"
+version = "0.1.0"
+description = "Spark batch processing jobs for the CineFlux lakehouse."
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "pydantic>=2.10,<3",
+    "pyspark==3.5.9",
+    "pyyaml>=6,<7",
+]
+
+[project.scripts]
+cineflux-spark-jobs = "spark_jobs.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spark_jobs"]

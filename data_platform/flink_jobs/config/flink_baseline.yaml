@@ -1,0 +1,35 @@
+job_name: cineflux-flink-baseline
+kafka:
+  source_topic: playback_events
+  source_partitions: 6
+  consumer_group: cineflux-flink-baseline
+  dlq_topic: playback_events_dlq
+  dlq_partitions: 6
+  startup_mode: earliest-offset
+outputs:
+  playback_metrics_table: playback_metrics_5m
+  content_popularity_table: content_popularity_5m
+processing:
+  parallelism: 1
+  window_minutes: 5
+  watermark_seconds: 5
+  source_idle_timeout_seconds: 30
+  late_handling_enabled: false
+  dedup_enabled: false
+  dedup_ttl_minutes: 90
+checkpoint:
+  interval_ms: 10000
+  timeout_ms: 60000
+  min_pause_ms: 0
+  max_concurrent: 1
+  tolerable_failures: 0
+  unaligned_enabled: false
+state:
+  backend: hashmap
+  incremental: false
+jdbc:
+  buffer_flush_max_rows: 1
+  buffer_flush_interval_ms: 100
+  max_retries: 3
+restart_attempts: 3
+restart_delay_ms: 10000

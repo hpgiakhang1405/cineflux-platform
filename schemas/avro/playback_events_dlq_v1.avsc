@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "PlaybackEventDlq",
+  "namespace": "com.cineflux.events",
+  "doc": "Replay-ready envelope for playback events rejected by stream contract validation.",
+  "fields": [
+    {"name": "dlq_id", "type": "string"},
+    {"name": "source_topic", "type": "string"},
+    {"name": "source_partition", "type": "int"},
+    {"name": "source_offset", "type": "long"},
+    {
+      "name": "source_timestamp",
+      "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}],
+      "default": null
+    },
+    {"name": "original_key", "type": ["null", "bytes"], "default": null},
+    {"name": "original_payload", "type": "bytes"},
+    {"name": "error_type", "type": "string"},
+    {"name": "error_message", "type": "string"},
+    {
+      "name": "detected_timestamp",
+      "type": {"type": "long", "logicalType": "timestamp-millis"}
+    },
+    {"name": "replay_count", "type": "int", "default": 0}
+  ]
+}

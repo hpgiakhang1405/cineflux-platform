@@ -1,0 +1,19 @@
+scenario_name: flink_demo
+shared_config: shared_demo.yaml
+topic: playback_events
+partitions: 6
+base_event_count: 500000
+base_rate_per_second: 4000
+pace_events: true
+event_time_acceleration: 5.0
+duplicate_rate: 0.015
+late_arrival_rate: 0.05
+late_arrival_min_seconds: 900
+late_arrival_max_seconds: 3600
+out_of_order_rate: 0.03
+out_of_order_buffer_size: 500
+invalid_payload_rate: 0.005
+burst:
+  cycle_seconds: 10
+  duration_ratio: 0.10
+  multiplier: 8

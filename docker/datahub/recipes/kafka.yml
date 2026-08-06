@@ -1,0 +1,17 @@
+source:
+  type: kafka
+  config:
+    env: ${DATAHUB_ENV}
+    platform_instance: ${DATAHUB_KAFKA_PLATFORM_INSTANCE}
+    connection:
+      bootstrap: ${KAFKA_BOOTSTRAP_SERVERS}
+      schema_registry_url: ${SCHEMA_REGISTRY_URL}
+    topic_patterns:
+      allow:
+        - playback_events
+        - playback_events_dlq
+    ingest_schemas_as_entities: true
+sink:
+  type: datahub-rest
+  config:
+    server: ${DATAHUB_GMS_URL}

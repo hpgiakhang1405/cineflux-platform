@@ -1,0 +1,14 @@
+cineflux:
+  target: "{{ env_var('DBT_TARGET') }}"
+  outputs:
+    dev:
+      type: trino
+      method: none
+      host: "{{ env_var('DBT_TRINO_HOST') }}"
+      port: "{{ env_var('DBT_TRINO_PORT') | int }}"
+      user: "{{ env_var('DBT_TRINO_USER') }}"
+      database: "{{ env_var('DBT_ICEBERG_CATALOG') }}"
+      schema: "{{ env_var('DBT_GOLD_SCHEMA') }}"
+      http_scheme: "{{ env_var('DBT_TRINO_HTTP_SCHEME') }}"
+      cert: false
+      threads: "{{ env_var('DBT_THREADS') | int }}"

@@ -1,0 +1,10 @@
+job_name: cineflux-airflow-raw-playback-events-snapshot-expiration
+spark:
+  shuffle_partitions: 8
+  adaptive_enabled: false
+  broadcast_threshold_bytes: -1
+table:
+  namespace: bronze
+  name: raw_playback_events
+retention_hours: 168
+retain_last: 10
